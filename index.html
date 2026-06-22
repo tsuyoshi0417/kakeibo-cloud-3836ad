@@ -560,6 +560,15 @@
     var diff=Math.round((c.next-ref)/86400000); return diff<1?1:diff;
   }
   function cycleRemain(catBudgets,catSpent){ var r=0; Object.keys(catBudgets).forEach(function(id){ r+=Number(catBudgets[id]||0)-Number(catSpent[id]||0); }); return r; }
+  // 当期（今日基準）の費目別支出合計。トーストの残額計算とホームで共用（二重計算しない）。
+  function currentCatSpent(){
+    var c=cycleOf(new Date());
+    var catSpent={};
+    DB.expenses.forEach(function(e){
+      if(inCycle(e.date||"",c)) catSpent[e.catId]=(catSpent[e.catId]||0)+Number(e.amount||0);
+    });
+    return catSpent;
+  }
   function cycleBudgetTotal(catBudgets){ var t=0; Object.keys(catBudgets).forEach(function(id){ t+=Number(catBudgets[id]||0); }); return t; }
   function nowStr(){ var d=new Date(),p=function(n){return String(n).padStart(2,"0");}; return p(d.getHours())+":"+p(d.getMinutes()); }
   var toastTimer;
@@ -672,8 +681,11 @@
   // ============================================================
   function renderAdd(){
     if(!$("inDate").value) $("inDate").value=todayStr();
+    // 店プレースホルダ＝最後に使った店（打たず思い出せる。表示のみ・値は入れない）
+    var lastStore=lastUsedStore();
+    $("inStore").placeholder=lastStore?("いつもは "+lastStore):"選ぶ or 入力";
     var box=$("catChips"); box.innerHTML="";
-    DB.cats.forEach(function(c){
+    orderedCats().forEach(function(c){
       var b=document.createElement("div");
       b.className="chip"+(c.id===selectedCat?" on":"");
       b.textContent=c.icon+" "+c.name;
@@ -688,6 +700,20 @@
     if(!selectedCat && DB.cats[0]) selectedCat=DB.cats[0].id;
     refreshStoreDatalists();
     renderRecent();
+  }
+  // 費目チップを直近の使用頻度が高い順に（同頻度・履歴なしは既定順のまま＝安定ソート）。表示順のみ・id/データは不変。
+  function orderedCats(){
+    var freq={};
+    DB.expenses.forEach(function(e){ if(e.catId) freq[e.catId]=(freq[e.catId]||0)+1; });
+    return DB.cats.map(function(c,i){ return {c:c,i:i,f:freq[c.id]||0}; })
+      .sort(function(a,b){ return b.f-a.f || a.i-b.i; })
+      .map(function(x){ return x.c; });
+  }
+  // 最後に使った店（直近の支出のうち店名がある最新の1件）
+  function lastUsedStore(){
+    var list=DB.expenses.slice().sort(function(a,b){ return (b.date+b.id).localeCompare(a.date+a.id); });
+    for(var i=0;i<list.length;i++){ if(list[i].store) return list[i].store; }
+    return "";
   }
   function renderRecent(){
     var box=$("recentList");
@@ -722,8 +748,25 @@
     save();
     $("inAmount").value=""; $("inStore").value="";
     refreshStoreDatalists(); renderRecent();
-    toast("追加しました ✓");
+    toast(addedToast(selectedCat));
   });
+  // 追加後の即時フィードバック：打つと残額が動く（中立・評価語なし・既存の残額/期ロジック流用）。
+  function addedToast(catId){
+    var catBudgets=DB.catBudgets||{};
+    var catSpent=currentCatSpent();
+    // ① その費目に予算がある → 「〔費目名〕はあと ¥◯◯」（当期予算 − 当期その費目支出）
+    if(catBudgets[catId]!=null && catBudgets[catId]>0){
+      var left=Number(catBudgets[catId])-Number(catSpent[catId]||0);
+      return "追加 ✓ "+catById(catId).name+"はあと "+signedYen(left);
+    }
+    // ② 予算が無い費目 → 「今期あと ¥◯◯」（予算設定済み費目合計の残額）。残額の対象が無ければ「追加 ✓」だけ
+    if(Object.keys(catBudgets).length>0){
+      return "追加 ✓ 今期あと "+signedYen(cycleRemain(catBudgets,catSpent));
+    }
+    return "追加 ✓";
+  }
+  // マイナスでも淡々と数字だけ（既存のマイナス中立表示の流儀）
+  function signedYen(n){ n=Math.round(n||0); return (n<0?"−¥":"¥")+Math.abs(n).toLocaleString("ja-JP"); }
   function refreshStoreDatalists(){
     var names=DB.stores.map(function(s){return s.name;});
     [["storeList"],["storeList2"]].forEach(function(p){
