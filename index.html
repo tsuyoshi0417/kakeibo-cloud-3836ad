@@ -329,8 +329,10 @@
     messagingSenderId: "220518156378",
     appId: "1:220518156378:web:fc500ab4268076fe66f063"
   };
-  var ALLOWED_EMAIL = "gitans.trapnest@gmail.com"; // この人だけ使える
-  var VAULT_PATH = "/vault";                        // RTDBの保管ノード（暗号文＋version）
+  // アクセス制御はRTDBルール（サーバ側）に一任。許可メール一覧はルール側に置く
+  // ＝公開リポジトリのJSにメールアドレスを晒さない（プライバシー）。
+  var VAULT_PATH = "/vault";                        // RTDBの保管ノード（暗号文＋version）。許可された複数ユーザーが同じ家計を共有
+
 
   // 暗号パラメータ（既存ページ＝価格ツール/妻ページと exact 一致）
   var PBKDF2_ITER = 600000;
@@ -1137,20 +1139,9 @@
           return;
         }
         fbUser=user;
-        if((user.email||"").toLowerCase()!==ALLOWED_EMAIL){
-          // 許可外アカウント → signOut して停止。自動で再サインインはしない。
-          rejecting=true;
-          var badEmail=user.email||"不明";
-          fbAuth.signOut().catch(function(){}).finally(function(){
-            fbUser=null; rejecting=false;
-            gate("gateSignin");
-            show($("signinErr"));
-            $("signinErr").innerHTML="このアカウント（"+escapeHtml(badEmail)+"）では使えません。<br>"+escapeHtml(ALLOWED_EMAIL)+" でサインインしてください。";
-            $("signinBtn").textContent="別のアカウントでサインイン";
-          });
-          return;
-        }
-        // 認証OK → vault取得 → PINゲートへ
+        // アクセス制御はRTDBルール（サーバ側）に一任する。
+        // ここではメールを判定しない（許可メール一覧はルール側＝公開JSに晒さない）。
+        // /vault の読み取りが permission-denied なら afterSignedIn() 内で弾く。
         afterSignedIn();
       });
     });
@@ -1180,10 +1171,26 @@
       }
     }).catch(function(e){
       console.error("vault取得失敗",e);
+      var code=(e&&e.code?String(e.code):"").toLowerCase();
+      var msg=(e&&e.message?String(e.message):"").toLowerCase();
+      var denied=(code.indexOf("permission")>=0)||(code.indexOf("permission_denied")>=0)||(msg.indexOf("permission")>=0)||(msg.indexOf("permission_denied")>=0);
+      if(denied){
+        // 許可されていないアカウント（RTDBルールが /vault の読みを拒否）。
+        // 優しく案内して signOut。自動で再サインインはしない（ループ防止）。
+        rejecting=true;
+        fbAuth.signOut().catch(function(){}).finally(function(){
+          fbUser=null; rejecting=false;
+          gate("gateSignin");
+          show($("signinErr"));
+          $("signinErr").innerHTML="このアカウントは許可されていません。<br>つよしさんに連絡してね。";
+          $("signinBtn").textContent="別のアカウントでサインイン";
+        });
+        return;
+      }
+      // それ以外（電波・ルール未設定など）は接続失敗として案内（signOutはしない）。
       gate("gateSignin");
       show($("signinErr"));
-      // RTDBアクセス不可＝ルール未設定 or 権限なしが濃厚
-      $("signinErr").innerHTML="クラウドに接続できませんでした。<br><span class='small'>（Firebaseのルール設定が必要な可能性があります）</span>";
+      $("signinErr").innerHTML="クラウドに接続できませんでした。<br><span class='small'>（電波、またはFirebaseのルール設定を確認してください）</span>";
     });
   }
 
