@@ -88,6 +88,18 @@
   .help{font-size:12px;color:var(--ink-sub);margin-top:4px;}
   .warn-flag{display:inline-block;background:#fbf3e0;color:var(--warn);font-weight:700;font-size:12px;padding:2px 7px;border-radius:8px;white-space:nowrap;}
   .warn-note{font-size:12px;color:var(--warn);background:#fbf3e0;border-radius:8px;padding:7px 10px;margin-top:6px;}
+  .mirror-card{background:transparent;box-shadow:none;border:1px solid var(--line);padding:14px 16px;}
+  .mirror-card .sec-title{color:var(--ink-sub);font-size:12px;font-weight:600;letter-spacing:0;}
+  .mirror-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;}
+  .mirror-row .mtxt{font-size:15px;font-weight:600;color:var(--ink);}
+  .mirror-row .mnote{margin-left:2px;}
+  .mirror-cmp{font-size:13px;color:#8c857a;margin-top:4px;}
+  .mirror-cmp b{font-weight:700;color:var(--ink);}
+  .mirror-msg{font-size:13px;font-weight:600;margin-top:5px;}
+  .mirror-msg.ok{color:var(--ok);}
+  .mirror-msg.calm{color:var(--ink-sub);}
+  .mirror-card .mirror-row:not(:first-of-type){margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);}
+  .mirror-grow{font-size:12px;color:var(--ink-sub);margin-top:12px;}
   .bar-item.clickable{cursor:pointer;}
   .bar-head .caret{color:var(--ink-sub);font-size:12px;margin-left:6px;transition:transform .2s;display:inline-block;}
   .bar-item.open .caret{transform:rotate(90deg);}
@@ -222,6 +234,7 @@
       </div>
       <div class="pace-line" id="paceLine"></div>
     </div>
+    <div id="priceMirror"></div>
     <div class="card">
       <h3 class="sec-title">費目別に使った額</h3>
       <div id="catBars"><div class="empty">まだ支出がありません</div></div>
@@ -271,6 +284,8 @@
         <option value="ml">ml（100mlあたりで比較）</option>
         <option value="kosu">個・枚（1個あたりで比較）</option>
       </select>
+      <label>記録した日</label>
+      <input type="date" id="pDate">
       <div style="height:12px;"></div>
       <button class="btn" id="pAddBtn">＋ この価格を登録</button>
     </div>
@@ -596,6 +611,8 @@
       d.prices.forEach(function(p){
         if(p.qty===null||p.qty===undefined||p.qty===""){ p.qty=null; }
         else{ var q=Number(p.qty); p.qty=(isFinite(q)&&q>0)?q:null; }
+        // date は後方互換：YYYY-MM-DD以外（未定義含む）は空のまま許容（subId/§8と同じ）
+        p.date = (typeof p.date==="string" && /^\d{4}-\d{2}-\d{2}$/.test(p.date)) ? p.date : "";
       });
       // --- 目標エンジン：欠損は既定で吸収（SCHEMA_VERSION据え置き） ---
       d.goal = normalizeGoal(d.goal);
@@ -740,11 +757,75 @@
   // ============================================================
   //  ホーム（既存ロジックそのまま）
   // ============================================================
+  // ============================================================
+  //  記録の鏡（§13-Q 本命「いつもの値段の鏡」v0）
+  //  事実だけを静かに返す。買わせない・責めない・他人と比べない（過去の自分のみ）。
+  //  対象＝date がある prices だけ（日付なしの既存記録は鏡に出さない＝嘘くさくしない）。
+  // ============================================================
+  function priceUnitVal(p){
+    var hasQty=(p.qty!=null)&&Number(p.qty)>0;
+    return hasQty ? (Number(p.price)/Number(p.qty)*unitPer(p.unit)) : null; // 単価。内容量不明はnull
+  }
+  function renderMirror(){
+    var slot=$("priceMirror"); if(!slot) return;
+    // date を持つ価格だけ（後方互換：無印は対象外）
+    var dated=(DB.prices||[]).filter(function(p){ return p.date && /^\d{4}-\d{2}-\d{2}$/.test(p.date); });
+    if(!dated.length){ slot.innerHTML=""; return; } // 事実が無い日は枠ごと消す
+    // 直近に記録した買い物（date降順、同日内はid降順）。先頭1〜2件を鏡に出す。
+    var recent=dated.slice().sort(function(a,b){ return (b.date+(b.id||"")).localeCompare(a.date+(a.id||"")); });
+    var lines=[];
+    var seenKey={};
+    for(var i=0;i<recent.length && lines.length<2;i++){
+      var p=recent[i];
+      var key=p.name+"|"+p.unit;
+      if(seenKey[key]) continue;   // 同じ商品は1回だけ（直近の記録を代表に）
+      seenKey[key]=true;
+      lines.push(buildMirrorLine(p, dated));
+    }
+    var inner=lines.map(function(l){ return l; }).join("");
+    // データが薄い初期だけ（datedな価格記録が3件未満）、末尾に「ここは育つ」一文。3件以上で自動で消える。
+    var grow=(dated.length<3)?'<div class="mirror-grow">記録がたまるほど、ここで前回との差が見えるようになります</div>':'';
+    slot.innerHTML='<div class="card mirror-card"><h3 class="sec-title">記録の鏡</h3>'+inner+grow+'</div>';
+  }
+  // 1品ぶんの行。過去の同名(name+unit)記録と「今回/前回」を中立に並べ、安い時だけ静かに声かけ。
+  function buildMirrorLine(p, dated){
+    var same=dated.filter(function(q){ return q.name===p.name && q.unit===p.unit; })
+                  .sort(function(a,b){ return (b.date+(b.id||"")).localeCompare(a.date+(a.id||"")); });
+    var storeTxt=p.store?escapeHtml(p.store)+"の":"";
+    var nameTxt=escapeHtml(p.name);
+    // 1点もの＝正直に「はじめての記録」と添える
+    if(same.length<2){
+      return '<div class="mirror-row"><span class="mtxt">'+storeTxt+nameTxt+' '+yen(p.price)+'</span>'+
+             '<span class="mnote muted small">（はじめての記録）</span></div>';
+    }
+    var cur=same[0], prev=same[1];
+    // 比較は単価が両方出れば単価、片方でも不明なら総額（中立・評価語なし）
+    var cu=priceUnitVal(cur), pu=priceUnitVal(prev);
+    var useUnit=(cu!=null && pu!=null);
+    var curV=useUnit?cu:Number(cur.price), prevV=useUnit?pu:Number(prev.price);
+    var perWord=(cur.unit==="kosu")?"1個あたり":(cur.unit==="ml")?"100mlあたり":"100gあたり";
+    var fmt=function(v){ return useUnit?yen(v):yen(v); };
+    var unitTag=useUnit?('<span class="muted small">（'+perWord+'）</span>'):'';
+    var cmp='<div class="mirror-cmp">今回 <b>'+fmt(curV)+'</b> / 前回 <b>'+fmt(prevV)+'</b> '+unitTag+'</div>';
+    // 非対称：自己ベスト更新 or 前回より安い時だけ声かけ。高い時は数字だけで黙る＋許可形を同じ重みで。
+    var msg="";
+    var bestPrev=Math.min.apply(null, same.slice(1).map(function(q){ var u=priceUnitVal(q); return (useUnit&&u!=null)?u:Number(q.price); }));
+    if(curV<prevV){
+      if(curV<=bestPrev){ msg='<div class="mirror-msg ok">これまでで一番安いね</div>'; }
+      else{ msg='<div class="mirror-msg ok">前回より安いね</div>'; }
+    }else if(curV>prevV){
+      // 高い時は責めない。許可形を、安い時の声かけと同じトーン・同じ重みで。
+      msg='<div class="mirror-msg calm">急がなければ、見送ってもいい時期です</div>';
+    } // 同額は何も言わない（数字だけ）
+    return '<div class="mirror-row"><span class="mtxt">'+storeTxt+nameTxt+' '+yen(cur.price)+'</span></div>'+cmp+msg;
+  }
+
   function renderHome(){
     // 目標：自動繰越（未処理の過去期分を1回だけ加算）→ 締め日リセットの挨拶 → 目標スロット描画
     runAutoRollover();
     renderFreshBanner();
     renderGoalSlot();
+    renderMirror();
     var c=cycleOf(viewAnchor);
     var todayCycle=cycleOf(new Date());
     var isCurrent=ymd(c.start)===ymd(todayCycle.start);
@@ -991,6 +1072,7 @@
     keys.forEach(function(k){ var g=groups[k]; var o=document.createElement("option"); o.value=k; o.textContent=g.name+"（"+UNIT_LABEL[g.unit]+"）"; sel.appendChild(o); });
     updateVUnit();
     $("vResult").innerHTML="";
+    if($("pDate") && !$("pDate").value) $("pDate").value=todayStr();
   }
   function updateVUnit(){
     var k=$("vProd").value;
@@ -1008,11 +1090,12 @@
     if(!name){ toast("商品名を入れてください"); return; }
     if(!price||price<=0){ toast("価格を入れてください"); return; }
     if(qtyRaw!=="" && (!qty||qty<=0)){ toast("内容量は数字で（不明なら空欄でOK）"); return; }
-    DB.prices.push({id:uid(),name:name,store:store,price:price,qty:qty,unit:unit});
+    var pdate=$("pDate").value||todayStr();
+    DB.prices.push({id:uid(),name:name,store:store,price:price,qty:qty,unit:unit,date:pdate});
     if(store && !DB.stores.some(function(s){return s.name===store;})) DB.stores.push({name:store,km:0,fare:0});
     save();
     $("pPrice").value=""; $("pQty").value=""; $("pStore").value="";
-    renderCompare(); toast("登録しました ✓");
+    renderCompare(); renderHome(); toast("登録しました ✓");
   });
   $("vCalcBtn").addEventListener("click", function(){
     var k=$("vProd").value;
