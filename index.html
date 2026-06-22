@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#427e89">
+<title>家計簿（クラウド）</title>
+<style>
+  :root{
+    --bg:#f4f1e8; --card:#ffffff; --ink:#2c2a26; --ink-sub:#6b6459;
+    --teal:#427e89; --teal-dark:#356670; --gold:#a98b3c; --line:#e3ddcf;
+    --danger:#b3503f; --ok:#3f7d52; --warn:#c08a2d;
+    --shadow:0 2px 8px rgba(44,42,38,.08); --radius:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:16px;line-height:1.5;
+    padding-bottom:78px;-webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:560px;margin:0 auto;padding:14px 14px 0;}
+  h1,h2,h3{margin:0;font-weight:700;}
+  .muted{color:var(--ink-sub);}
+  .small{font-size:13px;}
+  .center{text-align:center;}
+  .hidden{display:none !important;}
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:14px;border:1px solid var(--line);}
+  label{display:block;font-size:13px;color:var(--ink-sub);margin:10px 0 4px;font-weight:600;}
+  input,select{width:100%;font-size:17px;padding:13px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);appearance:none;}
+  input:focus,select:focus{outline:none;border-color:var(--teal);}
+  select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b6459' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px;}
+  .row{display:flex;gap:10px;}
+  .row>*{flex:1;}
+  .btn{display:block;width:100%;border:none;border-radius:12px;padding:15px;font-size:17px;font-weight:700;cursor:pointer;background:var(--teal);color:#fff;box-shadow:var(--shadow);}
+  .btn:active{background:var(--teal-dark);}
+  .btn.sub{background:#fff;color:var(--teal);border:1.5px solid var(--teal);box-shadow:none;}
+  .btn.mini{padding:8px 12px;font-size:14px;width:auto;border-radius:10px;}
+  .btn.danger{background:#fff;color:var(--danger);border:1.5px solid var(--danger);box-shadow:none;}
+  .btn[disabled]{opacity:.5;cursor:default;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{padding:10px 14px;border-radius:999px;border:1.5px solid var(--line);background:#fff;font-size:15px;font-weight:600;cursor:pointer;color:var(--ink-sub);}
+  .chip.on{background:var(--teal);color:#fff;border-color:var(--teal);}
+  .big-remain{font-size:46px;font-weight:800;line-height:1.1;letter-spacing:-1px;}
+  .big-remain.neg{color:var(--danger);}
+  .big-remain .yen{font-size:24px;font-weight:700;margin-right:2px;}
+  .stat-row{display:flex;justify-content:space-around;margin-top:6px;padding-top:14px;border-top:1px solid var(--line);}
+  .stat{text-align:center;}
+  .stat .v{font-size:20px;font-weight:700;}
+  .stat .l{font-size:12px;color:var(--ink-sub);}
+  .pace-line{margin-top:12px;font-size:14px;color:var(--gold);font-weight:600;}
+  .pace-line .pn{font-size:17px;font-weight:700;}
+  .bar-item{margin:12px 0;}
+  .bar-head{display:flex;justify-content:space-between;font-size:14px;margin-bottom:5px;}
+  .bar-track{height:12px;background:#efeadd;border-radius:8px;overflow:hidden;}
+  .bar-fill{height:100%;background:var(--teal);border-radius:8px;transition:width .3s;}
+  .item{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);}
+  .item:last-child{border-bottom:none;}
+  .item .ic{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f0ece0;flex:0 0 auto;}
+  .item .mid{flex:1;min-width:0;}
+  .item .mid .t{font-weight:600;}
+  .item .amt{font-weight:700;white-space:nowrap;}
+  .del{background:none;border:none;color:var(--danger);font-size:13px;cursor:pointer;padding:6px;flex:0 0 auto;}
+  .tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:#fff;border-top:1px solid var(--line);box-shadow:0 -2px 10px rgba(44,42,38,.06);z-index:50;padding-bottom:env(safe-area-inset-bottom);}
+  .tabbar button{flex:1;border:none;background:none;padding:10px 4px;cursor:pointer;color:var(--ink-sub);font-size:11px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .tabbar button.on{color:var(--teal);}
+  .tabbar .ti{font-size:21px;line-height:1;}
+  .page{display:none;}
+  .page.on{display:block;animation:fade .2s;}
+  @keyframes fade{from{opacity:.4}to{opacity:1}}
+  .sec-title{font-size:14px;font-weight:700;color:var(--gold);margin:4px 0 8px;letter-spacing:.5px;}
+  .empty{text-align:center;color:var(--ink-sub);padding:24px 8px;font-size:14px;}
+  .best{display:inline-block;background:var(--ok);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:6px;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--line);}
+  th:first-child,td:first-child{text-align:left;}
+  th{color:var(--ink-sub);font-weight:600;font-size:12px;}
+  .verdict{border-radius:12px;padding:14px;margin-top:12px;font-weight:700;text-align:center;font-size:15px;}
+  .verdict.win{background:#e6f0e9;color:var(--ok);border:1px solid #bcd9c5;}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:92px;background:var(--ink);color:#fff;padding:11px 18px;border-radius:999px;font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:100;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+  .month-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .month-nav button{background:#fff;border:1.5px solid var(--line);border-radius:10px;width:40px;height:38px;font-size:18px;cursor:pointer;color:var(--teal);}
+  .month-nav .m{font-size:17px;font-weight:700;}
+  details{margin-top:6px;}
+  summary{cursor:pointer;color:var(--teal);font-weight:600;font-size:14px;padding:6px 0;}
+  .help{font-size:12px;color:var(--ink-sub);margin-top:4px;}
+  .warn-flag{display:inline-block;background:#fbf3e0;color:var(--warn);font-weight:700;font-size:12px;padding:2px 7px;border-radius:8px;white-space:nowrap;}
+  .warn-note{font-size:12px;color:var(--warn);background:#fbf3e0;border-radius:8px;padding:7px 10px;margin-top:6px;}
+  .bar-item.clickable{cursor:pointer;}
+  .bar-head .caret{color:var(--ink-sub);font-size:12px;margin-left:6px;transition:transform .2s;display:inline-block;}
+  .bar-item.open .caret{transform:rotate(90deg);}
+  .subbreak{margin:2px 0 10px 52px;display:none;}
+  .bar-item.open .subbreak{display:block;}
+  .subrow{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px dashed var(--line);}
+  .subrow:last-child{border-bottom:none;}
+  .subrow .sl{color:var(--ink-sub);}
+  .subrow .sv{font-weight:600;}
+
+  /* ===== ゲート（サインイン / PIN）===== */
+  .gate{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;}
+  .gate h1{font-size:24px;color:var(--teal);margin-bottom:8px;}
+  .gate .lead{color:var(--ink-sub);font-size:15px;margin-bottom:24px;max-width:340px;}
+  .gate .gbtn{width:100%;max-width:320px;}
+  .gate .err{color:var(--danger);font-weight:700;margin-top:16px;font-size:15px;}
+  .pin-dots{display:flex;gap:12px;margin:18px 0 22px;}
+  .pin-dots .d{width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--line);}
+  .pin-dots .d.f{background:var(--teal);border-color:var(--teal);}
+  .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:300px;}
+  .pad button{height:62px;font-size:24px;font-weight:700;border:1.5px solid var(--line);border-radius:14px;background:#fff;color:var(--ink);cursor:pointer;}
+  .pad button:active{background:#efeadd;}
+  .pad button.fn{font-size:18px;color:var(--ink-sub);font-weight:600;}
+  .signout{position:fixed;top:10px;right:12px;z-index:60;background:#fff;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--ink-sub);padding:5px 12px;cursor:pointer;}
+  .sync-badge{font-size:11px;color:var(--ink-sub);text-align:center;padding:4px 0 2px;}
+</style>
+</head>
+<body>
+
+<!-- ===== ゲート：読み込み中 ===== -->
+<div id="gateLoading" class="gate">
+  <h1>家計簿</h1>
+  <div class="lead" id="loadingMsg">接続中…</div>
+</div>
+
+<!-- ===== ゲート：サインイン ===== -->
+<div id="gateSignin" class="gate hidden">
+  <h1>家計簿（クラウド）</h1>
+  <div class="lead">スマホでもデータが同期する家計簿です。<br>はじめにGoogleでサインインしてください。</div>
+  <button class="btn gbtn" id="signinBtn">Googleでサインイン</button>
+  <div class="err hidden" id="signinErr"></div>
+</div>
+
+<!-- ===== ゲート：PIN ===== -->
+<div id="gatePin" class="gate hidden">
+  <h1 id="pinTitle">あいことば</h1>
+  <div class="lead" id="pinLead">8桁の数字を入れてください（最初の1回だけ・次から自動）</div>
+  <div class="pin-dots" id="pinDots"></div>
+  <div class="pad" id="pinPad"></div>
+  <div class="err hidden" id="pinErr"></div>
+</div>
+
+<!-- ===== 本体 ===== -->
+<div id="appRoot" class="hidden">
+<button class="signout" id="signoutBtn">サインアウト</button>
+<div class="wrap">
+  <div class="sync-badge" id="syncBadge"></div>
+
+  <!-- ホーム -->
+  <section id="home" class="page on">
+    <div class="month-nav">
+      <button id="homePrev" aria-label="前の期">‹</button>
+      <div class="m" id="homeMonth">―</div>
+      <button id="homeNext" aria-label="次の期">›</button>
+    </div>
+    <div class="card center">
+      <div class="muted small" id="remainLead">あといくら使える</div>
+      <div id="remain" class="big-remain"><span class="yen">¥</span>0</div>
+      <div class="stat-row">
+        <div class="stat"><div class="v" id="budgetV">¥0</div><div class="l">予算</div></div>
+        <div class="stat"><div class="v" id="spentV">¥0</div><div class="l">使った合計</div></div>
+        <div class="stat"><div class="v" id="daysV">―</div><div class="l">のこり日数</div></div>
+      </div>
+      <div class="pace-line" id="paceLine"></div>
+    </div>
+    <div class="card">
+      <h3 class="sec-title">費目別に使った額</h3>
+      <div id="catBars"><div class="empty">まだ支出がありません</div></div>
+    </div>
+  </section>
+
+  <!-- 入力 -->
+  <section id="add" class="page">
+    <div class="card">
+      <h2 style="margin-bottom:4px;">支出を追加</h2>
+      <label>日付</label>
+      <input type="date" id="inDate">
+      <label>費目</label>
+      <div class="chips" id="catChips"></div>
+      <label>金額（円）</label>
+      <input type="number" id="inAmount" inputmode="numeric" placeholder="例：480" min="0">
+      <label>店（任意）</label>
+      <input list="storeList" id="inStore" placeholder="選ぶ or 入力">
+      <datalist id="storeList"></datalist>
+      <div style="height:14px;"></div>
+      <button class="btn" id="addBtn">＋ 追加する</button>
+    </div>
+    <div class="card">
+      <h3 class="sec-title">最近の支出</h3>
+      <div id="recentList"><div class="empty">まだありません</div></div>
+    </div>
+  </section>
+
+  <!-- 価格比較 -->
+  <section id="compare" class="page">
+    <div class="card">
+      <h2 style="margin-bottom:4px;">価格を登録</h2>
+      <p class="help">商品ごとに「店・価格・内容量」を入れると、単価（100gあたり等）を自動計算して最安に印を付けます。<b>内容量が分からない時は空欄でOK</b>（「⚠️100gあたり不明」と表示され、後で入れると単価が出ます）。</p>
+      <label>商品名</label>
+      <input list="prodList" id="pName" placeholder="例：豚こま肉">
+      <datalist id="prodList"></datalist>
+      <label>店</label>
+      <input list="storeList2" id="pStore" placeholder="選ぶ or 入力">
+      <datalist id="storeList2"></datalist>
+      <div class="row">
+        <div><label>価格（円）</label><input type="number" id="pPrice" inputmode="numeric" placeholder="298" min="0"></div>
+        <div><label>内容量（不明なら空欄）</label><input type="number" id="pQty" inputmode="decimal" placeholder="250／不明は空欄" min="0"></div>
+      </div>
+      <label>単位</label>
+      <select id="pUnit">
+        <option value="g">g（100gあたりで比較）</option>
+        <option value="ml">ml（100mlあたりで比較）</option>
+        <option value="kosu">個・枚（1個あたりで比較）</option>
+      </select>
+      <div style="height:12px;"></div>
+      <button class="btn" id="pAddBtn">＋ この価格を登録</button>
+    </div>
+    <div class="card">
+      <h3 class="sec-title">商品ごとの単価くらべ</h3>
+      <div id="cmpList"><div class="empty">まだ登録がありません</div></div>
+    </div>
+    <div class="card">
+      <h3 class="sec-title">交通費を入れてどっちが得？</h3>
+      <p class="help">買う商品と量を選ぶと、店ごとに「商品代＋往復交通費」の総額を出して、いちばん得な店を判定します。距離・交通費は設定タブで。</p>
+      <label>商品</label>
+      <select id="vProd"></select>
+      <label>買う量</label>
+      <div class="row">
+        <div><input type="number" id="vQty" inputmode="decimal" placeholder="例：500"></div>
+        <div><select id="vQtyUnit" disabled><option>―</option></select></div>
+      </div>
+      <div style="height:12px;"></div>
+      <button class="btn sub" id="vCalcBtn">総額で比較する</button>
+      <div id="vResult"></div>
+    </div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="settings" class="page">
+    <div class="card">
+      <h2 style="margin-bottom:4px;">設定</h2>
+      <h3 class="sec-title">締め日（起算日）</h3>
+      <label>毎月この日からを「1ヶ月」とする（1〜28）</label>
+      <input type="number" id="setCycleDay" inputmode="numeric" placeholder="例：25" min="1" max="28">
+      <p class="help">例：25 なら「25日〜翌24日」で集計します。今日が含まれる期が「当期」。月末差異を避けるため最大28まで。</p>
+      <div style="height:12px;"></div>
+      <button class="btn" id="saveCycleBtn">締め日を保存</button>
+    </div>
+    <div class="card">
+      <h3 class="sec-title">費目ごとの予算（毎月くりかえし）</h3>
+      <p class="help">費目ごとに毎月同じ予算を設定します。<b>金額を入れた費目だけ</b>が残額計算の対象です（空欄＝予算なし＝残額に入らない）。初期は <b>食費 ¥35,000</b>。</p>
+      <div id="catBudgetList"></div>
+      <div style="height:12px;"></div>
+      <button class="btn" id="saveCatBudgetBtn">費目予算を保存</button>
+    </div>
+    <div class="card">
+      <h3 class="sec-title">店ごとの往復交通費（円）</h3>
+      <p class="help">④の損得判定で「商品代＋往復交通費」の総額を出します。徒歩・自転車で行く近所の店は <b>0</b> のままでOK。電車/バスで行く遠い店だけ往復運賃を入れてください。距離(km)は目安として表示用。</p>
+      <div class="row">
+        <div style="flex:2"><input id="stName" placeholder="店名"></div>
+        <div><input type="number" id="stKm" inputmode="decimal" placeholder="往復km"></div>
+        <div><input type="number" id="stFare" inputmode="numeric" placeholder="往復¥" min="0"></div>
+      </div>
+      <div style="height:10px;"></div>
+      <button class="btn sub" id="stAddBtn">＋ 店を追加 / 更新</button>
+      <div id="storeMaster" style="margin-top:10px;"></div>
+    </div>
+    <div class="card">
+      <h3 class="sec-title">費目の管理</h3>
+      <div class="row">
+        <div><input id="catIcon" placeholder="絵文字" maxlength="2"></div>
+        <div style="flex:2"><input id="catName" placeholder="費目名"></div>
+      </div>
+      <div style="height:10px;"></div>
+      <button class="btn sub" id="catAddBtn">＋ 費目を追加</button>
+      <div id="catMaster" style="margin-top:10px;"></div>
+    </div>
+    <div class="card">
+      <h3 class="sec-title">クラウド同期</h3>
+      <div id="cloudStatus" class="help">―</div>
+      <div style="height:10px;"></div>
+      <button class="btn sub" id="reloadCloudBtn">クラウドから読み直す</button>
+    </div>
+    <div class="card">
+      <h3 class="sec-title">Macのデータを取り込む（初回の移行）</h3>
+      <p class="help">現行のMacアプリの <b>家計簿データ.json</b> をここで読み込むと、暗号化してクラウドへ保存します。<b>クラウドが空の初回だけ</b>使ってください（既にクラウドにデータがある時は上書き確認が出ます）。</p>
+      <label class="btn sub" style="display:inline-block;text-align:center;">JSONファイルを選ぶ<input type="file" id="migrateFile" accept="application/json,.json" style="display:none;"></label>
+    </div>
+    <div class="card">
+      <details>
+        <summary>データの管理（書き出し・全消去）</summary>
+        <div style="height:8px;"></div>
+        <button class="btn sub mini" id="exportBtn">バックアップを書き出す</button>
+        <div style="height:14px;"></div>
+        <button class="btn danger mini" id="wipeBtn">クラウドを空にする</button>
+        <p class="help">「クラウドを空にする」は <b>クラウド上の家計簿データを初期状態に戻します</b>（元に戻せません）。バックアップを先に書き出してください。</p>
+      </details>
+    </div>
+  </section>
+</div>
+
+<nav class="tabbar">
+  <button data-tab="home" class="on"><span class="ti">🏠</span>ホーム</button>
+  <button data-tab="add"><span class="ti">✏️</span>入力</button>
+  <button data-tab="compare"><span class="ti">⚖️</span>価格比較</button>
+  <button data-tab="settings"><span class="ti">⚙️</span>設定</button>
+</nav>
+<div class="toast" id="toast"></div>
+</div><!-- /appRoot -->
+
+<!-- Firebase JS SDK（gstatic CDN・同期アプリなのでCDN許容）。compat版で読みやすく。 -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<script>
+(function(){
+  "use strict";
+
+  // ============================================================
+  //  Firebase 設定（社長のプロジェクト kakeibo-915e2）
+  // ============================================================
+  var firebaseConfig = {
+    apiKey: "AIzaSyAJk6eQnsVInWnaoOr0JIA2fSFE7Cd3ybg",
+    authDomain: "kakeibo-915e2.firebaseapp.com",
+    databaseURL: "https://kakeibo-915e2-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "kakeibo-915e2",
+    storageBucket: "kakeibo-915e2.firebasestorage.app",
+    messagingSenderId: "220518156378",
+    appId: "1:220518156378:web:fc500ab4268076fe66f063"
+  };
+  var ALLOWED_EMAIL = "gitans.trapnest@gmail.com"; // この人だけ使える
+  var VAULT_PATH = "/vault";                        // RTDBの保管ノード（暗号文＋version）
+
+  // 暗号パラメータ（既存ページ＝価格ツール/妻ページと exact 一致）
+  var PBKDF2_ITER = 600000;
+  var PBKDF2_HASH = "SHA-256";
+  var SCHEMA_VERSION = 1;                            // データ形式のバージョン（version比較とは別）
+  var LS_PIN = "kakeibo_cloud_pin_v1";              // この端末・このブラウザだけPINを記憶
+
+  var fbApp=null, fbAuth=null, fbDb=null, fbUser=null;
+  var aesKey=null;          // PINから導出した鍵（メモリ上のみ）
+  var serverVersion=0;      // 最後に読み込んだ vault の version（競合検知の基準）
+
+  // ============================================================
+  //  汎用ユーティリティ
+  // ============================================================
+  function $(id){ return document.getElementById(id); }
+  function show(el){ el.classList.remove("hidden"); }
+  function hide(el){ el.classList.add("hidden"); }
+  var enc=new TextEncoder(), dec=new TextDecoder();
+
+  function gate(which){
+    ["gateLoading","gateSignin","gatePin"].forEach(function(id){ hide($(id)); });
+    if(which) show($(which));
+    if(which) hide($("appRoot")); else show($("appRoot"));
+  }
+  function loadingMsg(m){ $("loadingMsg").textContent=m; }
+
+  // ============================================================
+  //  暗号（PBKDF2 → AES-GCM・E2E。クラウドには暗号文のみ）
+  // ============================================================
+  function bytesToB64(bytes){
+    var bin=""; for(var i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]); return btoa(bin);
+  }
+  function b64ToBytes(b64){
+    var bin=atob(b64); var out=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i); return out;
+  }
+  function deriveKey(pin, salt){
+    return crypto.subtle.importKey("raw", enc.encode(pin), {name:"PBKDF2"}, false, ["deriveKey"])
+      .then(function(baseKey){
+        return crypto.subtle.deriveKey(
+          {name:"PBKDF2", salt:salt, iterations:PBKDF2_ITER, hash:PBKDF2_HASH},
+          baseKey, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]
+        );
+      });
+  }
+  // 平文オブジェクト → {ct,iv,salt,version,schema,updatedAt}（saltはPINごと固定でなく毎回新規＝より安全）
+  function encryptVault(key, salt, obj, version){
+    var iv=crypto.getRandomValues(new Uint8Array(12));
+    var pt=enc.encode(JSON.stringify(obj));
+    return crypto.subtle.encrypt({name:"AES-GCM", iv:iv}, key, pt).then(function(ctBuf){
+      return {
+        ct: bytesToB64(new Uint8Array(ctBuf)),
+        iv: bytesToB64(iv),
+        salt: bytesToB64(salt),
+        version: version,
+        schema: SCHEMA_VERSION,
+        updatedAt: Date.now()
+      };
+    });
+  }
+  function decryptVault(key, payload){
+    var iv=b64ToBytes(payload.iv), ct=b64ToBytes(payload.ct);
+    return crypto.subtle.decrypt({name:"AES-GCM", iv:iv}, key, ct).then(function(ptBuf){
+      return JSON.parse(dec.decode(new Uint8Array(ptBuf)));
+    });
+  }
+
+  // ============================================================
+  //  RTDB アクセス（暗号文の読み書き＋version競合）
+  // ============================================================
+  function readVaultRaw(){
+    return fbDb.ref(VAULT_PATH).get().then(function(snap){
+      return snap.exists() ? snap.val() : null;
+    });
+  }
+  function writeVaultRaw(payload){
+    return fbDb.ref(VAULT_PATH).set(payload);
+  }
+
+  // ============================================================
+  //  データモデル（既存 家計簿.html を全面流用）
+  // ============================================================
+  var DEFAULT_CATS = [
+    {id:"food", name:"食費", icon:"🍚"},
+    {id:"treat", name:"嗜好品", icon:"🍪"},
+    {id:"daily", name:"日用品", icon:"🧴"},
+    {id:"eatout", name:"外食", icon:"🍜"},
+    {id:"trans", name:"交通", icon:"🚗"},
+    {id:"other", name:"その他", icon:"📦"}
+  ];
+  var DEFAULT_SUBCATS = [
+    {id:"food_stable",name:"主食",parent:"food",icon:"🍚"},
+    {id:"food_meat",name:"肉",parent:"food",icon:"🥩"},
+    {id:"food_fish",name:"魚・刺身",parent:"food",icon:"🐟"},
+    {id:"food_vege",name:"野菜・果物",parent:"food",icon:"🥬"},
+    {id:"food_egg_milk",name:"卵・乳製品",parent:"food",icon:"🥚"},
+    {id:"food_soy",name:"豆腐・納豆・練物",parent:"food",icon:"🍢"},
+    {id:"food_seasoning",name:"調味料・油",parent:"food",icon:"🧂"},
+    {id:"food_ready",name:"惣菜・弁当・冷凍",parent:"food",icon:"🍱"},
+    {id:"food_etc",name:"その他食品",parent:"food",icon:"🍴"},
+    {id:"treat_snack",name:"お菓子・おやつ",parent:"treat",icon:"🍪"},
+    {id:"treat_drink",name:"飲料",parent:"treat",icon:"🥤"},
+    {id:"treat_alcohol",name:"酒",parent:"treat",icon:"🍺"},
+    {id:"daily_clean",name:"洗剤・掃除",parent:"daily",icon:"🧴"},
+    {id:"daily_paper",name:"紙類",parent:"daily",icon:"🧻"},
+    {id:"daily_kitchen",name:"キッチン消耗品",parent:"daily",icon:"🍳"},
+    {id:"daily_body",name:"衛生・身だしなみ",parent:"daily",icon:"🧼"},
+    {id:"daily_med",name:"薬・健康",parent:"daily",icon:"💊"},
+    {id:"daily_pet",name:"ペット",parent:"daily",icon:"🐾"},
+    {id:"daily_etc",name:"その他日用品",parent:"daily",icon:"📦"}
+  ];
+  function defaultData(){
+    return {
+      cats: DEFAULT_CATS.slice(),
+      subcats: DEFAULT_SUBCATS.slice(),
+      expenses: [],
+      cycleStartDay: 25,
+      catBudgets: {"food":35000},
+      stores: [
+        {name:"サニー高取店",km:0.8,fare:0},
+        {name:"ドラッグイレブン西新",km:0.9,fare:0},
+        {name:"フードウェイ西新店",km:1.4,fare:0},
+        {name:"ロピア長浜店",km:7.2,fare:0},
+        {name:"ロピア博多店",km:15.8,fare:520}
+      ],
+      prices: []
+    };
+  }
+  // 既存 load() と同じ正規化ロジック（保存先がオブジェクトに変わっただけ）
+  function normalize(dRaw){
+    try{
+      var base=defaultData();
+      var d = (dRaw && typeof dRaw==="object") ? dRaw : base;
+      d.cats = Array.isArray(d.cats)&&d.cats.length ? d.cats : base.cats;
+      d.subcats = Array.isArray(d.subcats)&&d.subcats.length ? d.subcats : base.subcats;
+      d.expenses = Array.isArray(d.expenses) ? d.expenses : [];
+      var csd=Number(d.cycleStartDay);
+      d.cycleStartDay = (isFinite(csd)&&csd>=1) ? Math.min(28,Math.max(1,Math.round(csd))) : 25;
+      if(d.catBudgets && typeof d.catBudgets==="object" && !Array.isArray(d.catBudgets)){
+        var cb={}; Object.keys(d.catBudgets).forEach(function(k){ var v=Number(d.catBudgets[k]); if(isFinite(v)&&v>0) cb[k]=Math.round(v); });
+        d.catBudgets=cb;
+      }else{ d.catBudgets=base.catBudgets; }
+      if("budgets" in d) delete d.budgets;
+      d.stores = Array.isArray(d.stores) ? d.stores : [];
+      d.prices = Array.isArray(d.prices) ? d.prices : [];
+      if("rate" in d) delete d.rate;
+      d.stores.forEach(function(s){
+        s.km = typeof s.km==="number"?s.km:Number(s.km||0);
+        s.fare = typeof s.fare==="number"?s.fare:Number(s.fare||0);
+      });
+      var subMap={}; d.subcats.forEach(function(sc){ subMap[sc.id]=sc; });
+      d.expenses.forEach(function(e){
+        if(e.subId){ var sc=subMap[e.subId]; if(sc&&sc.parent) e.catId=sc.parent; }
+      });
+      d.prices.forEach(function(p){
+        if(p.qty===null||p.qty===undefined||p.qty===""){ p.qty=null; }
+        else{ var q=Number(p.qty); p.qty=(isFinite(q)&&q>0)?q:null; }
+      });
+      return d;
+    }catch(e){ return defaultData(); }
+  }
+
+  var DB = defaultData();
+
+  // ============================================================
+  //  保存（唯一の経路：暗号化して RTDB へ。version+1・競合検知）
+  // ============================================================
+  var saltCache=null;   // 解錠時に確定（既存vaultのsalt or 新規）。鍵はsaltに紐付くため保持。
+  var saving=false;
+
+  // 保存：保存前に最新versionを取り直し、サーバが新しければ中断（後勝ち事故防止）。
+  function save(){
+    if(!aesKey || !saltCache){ return Promise.resolve(false); }
+    if(saving){ return Promise.resolve(false); }
+    saving=true;
+    setSync("保存中…");
+    return readVaultRaw().then(function(remote){
+      var remoteVer = remote && typeof remote.version==="number" ? remote.version : 0;
+      if(remoteVer > serverVersion){
+        // 他端末で更新された → 上書きしない。読み直しを促す。
+        saving=false;
+        setSync("⚠️ 他の端末で更新されました");
+        toast("他の端末で更新あり。『クラウドから読み直す』を押してね");
+        return false;
+      }
+      var nextVer = serverVersion + 1;
+      return encryptVault(aesKey, saltCache, DB, nextVer).then(function(payload){
+        return writeVaultRaw(payload).then(function(){
+          serverVersion = nextVer;
+          saving=false;
+          setSync("✓ 同期済み "+nowStr());
+          return true;
+        });
+      });
+    }).catch(function(e){
+      saving=false; console.error("保存失敗",e);
+      setSync("⚠️ 保存に失敗しました");
+      toast("クラウド保存に失敗。電波を確認して");
+      return false;
+    });
+  }
+  function setSync(t){ var b=$("syncBadge"); if(b) b.textContent=t; var c=$("cloudStatus"); if(c) c.textContent=t; }
+
+  // ============================================================
+  //  期（締め日ベース・§10）――既存ロジックそのまま
+  // ============================================================
+  function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+  function yen(n){ n=Math.round(n||0); return "¥"+n.toLocaleString("ja-JP"); }
+  function todayStr(){ var d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+  function catById(id){ for(var i=0;i<DB.cats.length;i++){ if(DB.cats[i].id===id) return DB.cats[i]; } return {name:"不明",icon:"❓"}; }
+  function startDay(){ var d=Number(DB.cycleStartDay); return (isFinite(d)&&d>=1)?Math.min(28,Math.max(1,Math.round(d))):25; }
+  function cycleOf(refDate){
+    var D=startDay();
+    var y=refDate.getFullYear(), m=refDate.getMonth(), day=refDate.getDate();
+    var start = (day>=D) ? new Date(y,m,D) : new Date(y,m-1,D);
+    var next=new Date(start.getFullYear(), start.getMonth()+1, D);
+    var end=new Date(next.getFullYear(), next.getMonth(), next.getDate()-1);
+    return {start:start,end:end,next:next};
+  }
+  function ymd(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+  function cycleLabel(c){ return (c.end.getMonth()+1)+"/"+c.end.getDate()+"までの家計"; }
+  function inCycle(dateStr,c){ var s=ymd(c.start), e=ymd(c.end); return dateStr>=s && dateStr<=e; }
+  function daysLeftIn(c,refDate){
+    var ref=new Date(refDate.getFullYear(),refDate.getMonth(),refDate.getDate());
+    var diff=Math.round((c.next-ref)/86400000); return diff<1?1:diff;
+  }
+  function cycleRemain(catBudgets,catSpent){ var r=0; Object.keys(catBudgets).forEach(function(id){ r+=Number(catBudgets[id]||0)-Number(catSpent[id]||0); }); return r; }
+  function cycleBudgetTotal(catBudgets){ var t=0; Object.keys(catBudgets).forEach(function(id){ t+=Number(catBudgets[id]||0); }); return t; }
+  function nowStr(){ var d=new Date(),p=function(n){return String(n).padStart(2,"0");}; return p(d.getHours())+":"+p(d.getMinutes()); }
+  var toastTimer;
+  function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(function(){ t.classList.remove("show"); },2200); }
+  function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+  function cssVar(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||"#3f7d52"; }
+
+  var viewAnchor=new Date();
+  var selectedCat=DB.cats[0]?DB.cats[0].id:null;
+
+  // ============================================================
+  //  タブ
+  // ============================================================
+  var tabBtns=document.querySelectorAll(".tabbar button");
+  for(var ti=0;ti<tabBtns.length;ti++){
+    tabBtns[ti].addEventListener("click", function(){
+      var tab=this.getAttribute("data-tab");
+      var pages=document.querySelectorAll(".page");
+      for(var j=0;j<pages.length;j++) pages[j].classList.remove("on");
+      $(tab).classList.add("on");
+      for(var k=0;k<tabBtns.length;k++) tabBtns[k].classList.remove("on");
+      this.classList.add("on");
+      window.scrollTo(0,0);
+      if(tab==="compare") renderCompare();
+      if(tab==="settings") renderSettings();
+      if(tab==="add") renderAdd();
+      if(tab==="home") renderHome();
+    });
+  }
+
+  // ============================================================
+  //  ホーム（既存ロジックそのまま）
+  // ============================================================
+  function renderHome(){
+    var c=cycleOf(viewAnchor);
+    var todayCycle=cycleOf(new Date());
+    var isCurrent=ymd(c.start)===ymd(todayCycle.start);
+    $("homeMonth").textContent=cycleLabel(c)+(isCurrent?"":"（過去）");
+    var catBudgets=DB.catBudgets||{};
+    var list=DB.expenses.filter(function(e){ return inCycle(e.date||"",c); });
+    var spent=list.reduce(function(s,e){ return s+Number(e.amount||0); },0);
+    var catSpent={}; list.forEach(function(e){ catSpent[e.catId]=(catSpent[e.catId]||0)+Number(e.amount||0); });
+    var remain=cycleRemain(catBudgets,catSpent);
+    var budgetTotal=cycleBudgetTotal(catBudgets);
+    var hasBudget=Object.keys(catBudgets).length>0;
+    var rEl=$("remain");
+    if(!hasBudget){
+      $("remainLead").textContent="予算が未設定です";
+      rEl.innerHTML='<span class="yen">¥</span>0'; rEl.classList.remove("neg");
+    }else{
+      $("remainLead").textContent="あといくら使える";
+      rEl.innerHTML=(remain<0?'<span class="yen">−¥</span>':'<span class="yen">¥</span>')+Math.abs(remain).toLocaleString("ja-JP");
+      rEl.classList.toggle("neg",remain<0);
+    }
+    $("budgetV").textContent=yen(budgetTotal);
+    $("spentV").textContent=yen(spent);
+    var daysLeft=daysLeftIn(c,new Date());
+    $("daysV").textContent=isCurrent?(daysLeft+"日"):"―";
+    var paceEl=$("paceLine");
+    if(isCurrent && hasBudget && remain>=0){
+      if(daysLeft<=1){ paceEl.innerHTML='今日が最後の日'; }
+      else{ var pace=Math.round(remain/daysLeft/100)*100; paceEl.innerHTML='今日のペース目安 <span class="pn">1日 '+yen(pace)+' くらい</span>'; }
+    }else{ paceEl.innerHTML=""; }
+    var byCat={}, bySub={}, subById={}; DB.subcats.forEach(function(sc){ subById[sc.id]=sc; });
+    list.forEach(function(e){
+      var amt=Number(e.amount||0);
+      byCat[e.catId]=(byCat[e.catId]||0)+amt;
+      var sc=e.subId&&subById[e.subId]?subById[e.subId]:null;
+      var cKey=sc?sc.parent:e.catId; var sKey=sc?sc.id:"_none";
+      if(!bySub[cKey]) bySub[cKey]={};
+      bySub[cKey][sKey]=(bySub[cKey][sKey]||0)+amt;
+    });
+    var rows=[]; DB.cats.forEach(function(cc){ var v=byCat[cc.id]||0; if(v>0) rows.push({c:cc,v:v}); });
+    rows.sort(function(a,b){ return b.v-a.v; });
+    var maxv=rows.length?rows[0].v:1;
+    var box=$("catBars");
+    if(!rows.length){ box.innerHTML='<div class="empty">まだ支出がありません</div>'; return; }
+    var html="";
+    rows.forEach(function(r){
+      var pct=Math.max(4,Math.round(r.v/maxv*100));
+      var subs=bySub[r.c.id]||{};
+      var subRows=[];
+      Object.keys(subs).forEach(function(sk){
+        if(sk==="_none"){ subRows.push({name:"（細分類なし）",icon:"・",v:subs[sk],none:true}); }
+        else{ var sc=subById[sk]; subRows.push({name:sc?sc.name:"不明",icon:sc?sc.icon:"❓",v:subs[sk]}); }
+      });
+      subRows.sort(function(a,b){ return b.v-a.v; });
+      var hasDetail=subRows.length>1||(subRows.length===1&&!subRows[0].none);
+      var breakHtml="";
+      if(hasDetail){
+        breakHtml='<div class="subbreak">';
+        subRows.forEach(function(s){ breakHtml+='<div class="subrow"><span class="sl">'+escapeHtml(s.icon)+" "+escapeHtml(s.name)+'</span><span class="sv">'+yen(s.v)+'</span></div>'; });
+        breakHtml+='</div>';
+      }
+      html+='<div class="bar-item'+(hasDetail?' clickable':'')+'" data-cat="'+escapeHtml(r.c.id)+'">'+
+            '<div class="bar-head"><span>'+escapeHtml(r.c.icon)+" "+escapeHtml(r.c.name)+
+            (hasDetail?'<span class="caret">▸</span>':'')+'</span><span><b>'+yen(r.v)+'</b></span></div>'+
+            '<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%"></div></div>'+breakHtml+'</div>';
+    });
+    box.innerHTML=html;
+    var clickable=box.querySelectorAll(".bar-item.clickable");
+    for(var i=0;i<clickable.length;i++){ clickable[i].addEventListener("click", function(){ this.classList.toggle("open"); }); }
+  }
+  $("homePrev").addEventListener("click", function(){ viewAnchor=shiftCycle(viewAnchor,-1); renderHome(); });
+  $("homeNext").addEventListener("click", function(){ viewAnchor=shiftCycle(viewAnchor,1); renderHome(); });
+  function shiftCycle(anchor,delta){ var c=cycleOf(anchor); return new Date(c.start.getFullYear(),c.start.getMonth()+delta,c.start.getDate()); }
+
+  // ============================================================
+  //  入力（既存ロジックそのまま。save()がクラウド書き込みに）
+  // ============================================================
+  function renderAdd(){
+    if(!$("inDate").value) $("inDate").value=todayStr();
+    var box=$("catChips"); box.innerHTML="";
+    DB.cats.forEach(function(c){
+      var b=document.createElement("div");
+      b.className="chip"+(c.id===selectedCat?" on":"");
+      b.textContent=c.icon+" "+c.name;
+      b.addEventListener("click", function(){
+        selectedCat=c.id;
+        var chips=box.querySelectorAll(".chip");
+        for(var i=0;i<chips.length;i++) chips[i].classList.remove("on");
+        b.classList.add("on");
+      });
+      box.appendChild(b);
+    });
+    if(!selectedCat && DB.cats[0]) selectedCat=DB.cats[0].id;
+    refreshStoreDatalists();
+    renderRecent();
+  }
+  function renderRecent(){
+    var box=$("recentList");
+    var list=DB.expenses.slice().sort(function(a,b){ return (b.date+b.id).localeCompare(a.date+a.id); }).slice(0,12);
+    if(!list.length){ box.innerHTML='<div class="empty">まだありません</div>'; return; }
+    var html="";
+    list.forEach(function(e){
+      var c=catById(e.catId);
+      var sub=e.date.slice(5).replace("-","/")+(e.store?(" ・ "+escapeHtml(e.store)):"");
+      html+='<div class="item"><div class="ic">'+escapeHtml(c.icon)+'</div>'+
+            '<div class="mid"><div class="t">'+escapeHtml(c.name)+'</div><div class="muted small">'+sub+'</div></div>'+
+            '<div class="amt">'+yen(e.amount)+'</div><button class="del" data-id="'+e.id+'">削除</button></div>';
+    });
+    box.innerHTML=html;
+    var dels=box.querySelectorAll(".del");
+    for(var i=0;i<dels.length;i++){
+      dels[i].addEventListener("click", function(){
+        var id=this.getAttribute("data-id");
+        DB.expenses=DB.expenses.filter(function(e){ return e.id!==id; });
+        save(); renderRecent(); toast("削除しました");
+      });
+    }
+  }
+  $("addBtn").addEventListener("click", function(){
+    var amount=Number($("inAmount").value);
+    var date=$("inDate").value||todayStr();
+    if(!selectedCat){ toast("費目を選んでください"); return; }
+    if(!amount||amount<=0){ toast("金額を入れてください"); return; }
+    var store=$("inStore").value.trim();
+    DB.expenses.push({id:uid(),date:date,catId:selectedCat,amount:amount,store:store});
+    if(store && !DB.stores.some(function(s){return s.name===store;})) DB.stores.push({name:store,km:0,fare:0});
+    save();
+    $("inAmount").value=""; $("inStore").value="";
+    refreshStoreDatalists(); renderRecent();
+    toast("追加しました ✓");
+  });
+  function refreshStoreDatalists(){
+    var names=DB.stores.map(function(s){return s.name;});
+    [["storeList"],["storeList2"]].forEach(function(p){
+      var dl=$(p[0]); if(!dl) return; dl.innerHTML="";
+      names.forEach(function(n){ var o=document.createElement("option"); o.value=n; dl.appendChild(o); });
+    });
+    var pl=$("prodList"); if(pl){ pl.innerHTML="";
+      var seen={}; DB.prices.forEach(function(p){ if(!seen[p.name]){seen[p.name]=1; var o=document.createElement("option"); o.value=p.name; pl.appendChild(o);} });
+    }
+  }
+
+  // ============================================================
+  //  価格比較（既存ロジックそのまま）
+  // ============================================================
+  var UNIT_LABEL={g:"g",ml:"ml",kosu:"個"};
+  function unitPer(unit){ return unit==="kosu"?1:100; }
+  function unitPerLabel(unit){ return unit==="kosu"?"1個あたり":(unit==="ml"?"100mlあたり":"100gあたり"); }
+  function renderCompare(){
+    refreshStoreDatalists();
+    var groups={};
+    DB.prices.forEach(function(p){
+      var key=p.name+"|"+p.unit;
+      if(!groups[key]) groups[key]={name:p.name,unit:p.unit,items:[]};
+      groups[key].items.push(p);
+    });
+    var keys=Object.keys(groups);
+    var box=$("cmpList");
+    if(!keys.length){ box.innerHTML='<div class="empty">まだ登録がありません</div>'; }
+    else{
+      var html="";
+      keys.forEach(function(k){
+        var g=groups[k];
+        g.items.forEach(function(it){
+          var per=unitPer(it.unit);
+          var hasQty=(it.qty!=null)&&Number(it.qty)>0;
+          it.qtyUnknown=!hasQty;
+          it.unitPrice=hasQty?(it.price/it.qty*per):Infinity;
+        });
+        var known=g.items.filter(function(it){ return !it.qtyUnknown; });
+        var sorted=g.items.slice().sort(function(a,b){return a.unitPrice-b.unitPrice;});
+        var best=known.length?Math.min.apply(null,known.map(function(it){return it.unitPrice;})):Infinity;
+        var hasUnknown=g.items.some(function(it){return it.qtyUnknown;});
+        var perWord=g.unit==="kosu"?"1個あたり":(g.unit==="ml"?"100mlあたり":"100gあたり");
+        html+='<div style="margin-bottom:16px;">';
+        html+='<div style="font-weight:700;margin-bottom:6px;">'+escapeHtml(g.name)+' <span class="muted small">（'+unitPerLabel(g.unit)+'）</span></div>';
+        html+='<table><tr><th>店</th><th>価格/量</th><th>単価</th><th></th></tr>';
+        sorted.forEach(function(it){
+          var isBest=!it.qtyUnknown&&it.unitPrice===best&&isFinite(best);
+          var qtyCell=it.qtyUnknown?'<span class="warn-flag">内容量?</span>':escapeHtml(String(it.qty))+UNIT_LABEL[it.unit];
+          var unitCell=it.qtyUnknown?'<span class="warn-flag">⚠️'+perWord+'不明</span>':'<b>'+yen(it.unitPrice)+'</b>';
+          html+='<tr><td>'+escapeHtml(it.store||"―")+'</td><td>'+yen(it.price)+' / '+qtyCell+'</td><td>'+unitCell+'</td>'+
+                '<td>'+(isBest?'<span class="best">最安</span>':'')+' <button class="del" data-pid="'+it.id+'">×</button></td></tr>';
+        });
+        html+='</table>';
+        if(hasUnknown){ html+='<div class="warn-note">⚠️ 内容量(量)が未入力の品は単価を比較できません。レシートの内容量を入れると単価が出ます。</div>'; }
+        html+='</div>';
+      });
+      box.innerHTML=html;
+      var dels=box.querySelectorAll(".del");
+      for(var i=0;i<dels.length;i++){
+        dels[i].addEventListener("click", function(){
+          var id=this.getAttribute("data-pid");
+          DB.prices=DB.prices.filter(function(p){return p.id!==id;});
+          save(); renderCompare(); toast("削除しました");
+        });
+      }
+    }
+    var sel=$("vProd"); sel.innerHTML="";
+    keys.forEach(function(k){ var g=groups[k]; var o=document.createElement("option"); o.value=k; o.textContent=g.name+"（"+UNIT_LABEL[g.unit]+"）"; sel.appendChild(o); });
+    updateVUnit();
+    $("vResult").innerHTML="";
+  }
+  function updateVUnit(){
+    var k=$("vProd").value;
+    var unit=k?k.split("|")[1]:null;
+    $("vQtyUnit").innerHTML="<option>"+(unit?UNIT_LABEL[unit]:"―")+"</option>";
+  }
+  $("vProd")&&$("vProd").addEventListener("change", updateVUnit);
+  $("pAddBtn").addEventListener("click", function(){
+    var name=$("pName").value.trim();
+    var store=$("pStore").value.trim();
+    var price=Number($("pPrice").value);
+    var qtyRaw=$("pQty").value.trim();
+    var qty=qtyRaw===""?null:Number(qtyRaw);
+    var unit=$("pUnit").value;
+    if(!name){ toast("商品名を入れてください"); return; }
+    if(!price||price<=0){ toast("価格を入れてください"); return; }
+    if(qtyRaw!=="" && (!qty||qty<=0)){ toast("内容量は数字で（不明なら空欄でOK）"); return; }
+    DB.prices.push({id:uid(),name:name,store:store,price:price,qty:qty,unit:unit});
+    if(store && !DB.stores.some(function(s){return s.name===store;})) DB.stores.push({name:store,km:0,fare:0});
+    save();
+    $("pPrice").value=""; $("pQty").value=""; $("pStore").value="";
+    renderCompare(); toast("登録しました ✓");
+  });
+  $("vCalcBtn").addEventListener("click", function(){
+    var k=$("vProd").value;
+    if(!k){ toast("商品がありません。先に価格を登録してください"); return; }
+    var qty=Number($("vQty").value);
+    if(!qty||qty<=0){ toast("買う量を入れてください"); return; }
+    var parts=k.split("|"); var name=parts[0]; var unit=parts[1];
+    var all=DB.prices.filter(function(p){ return p.name===name && p.unit===unit; });
+    var items=all.filter(function(p){ return p.qty!=null && Number(p.qty)>0; });
+    var skipped=all.filter(function(p){ return p.qty==null || !(Number(p.qty)>0); });
+    if(!items.length){
+      $("vResult").innerHTML='<div class="verdict" style="background:#fbf3e0;color:var(--gold);border:1px solid #ecd9a6;">⚠️ この商品は内容量が入った価格が無いため、総額で比較できません。<br><span class="small">価格比較で内容量を入れてください。</span></div>';
+      return;
+    }
+    var rows=items.map(function(it){
+      var goodsCost=it.price/it.qty*qty;
+      var st=storeInfo(it.store);
+      return {store:it.store||"―", km:st.km, fare:st.fare, goods:goodsCost, total:goodsCost+st.fare};
+    });
+    rows.sort(function(a,b){ return a.total-b.total; });
+    var win=rows[0];
+    var html='<table style="margin-top:12px;"><tr><th>店</th><th>商品代</th><th>往復交通費</th><th>総額</th></tr>';
+    rows.forEach(function(r){
+      var isWin=r===win;
+      var move=r.fare>0?"電車/バス":"徒歩/チャリ";
+      var fareCell=r.fare>0?yen(r.fare):'<span class="muted small">¥0</span>';
+      var kmNote=r.km>0?'<br><span class="muted small">'+move+' 往復'+r.km+'km</span>':'';
+      html+='<tr'+(isWin?' style="font-weight:700;color:'+cssVar("--ok")+'"':'')+'>'+
+            '<td>'+escapeHtml(r.store)+(isWin?' <span class="best">得</span>':'')+kmNote+'</td>'+
+            '<td>'+yen(r.goods)+'</td><td>'+fareCell+'</td><td>'+yen(r.total)+'</td></tr>';
+    });
+    html+='</table>';
+    var msg;
+    if(rows.length>1){
+      var diff=rows[1].total-win.total;
+      var cheapGoods=rows.slice().sort(function(a,b){return a.goods-b.goods;})[0];
+      msg='<b>'+escapeHtml(win.store)+'</b> がいちばん得（総額 '+yen(win.total)+'）<br><span class="small">2番目より '+yen(diff)+' お得</span>';
+      if(cheapGoods.store!==win.store){
+        msg+='<br><span class="small muted">※ 商品代だけなら '+escapeHtml(cheapGoods.store)+' が安い（'+yen(cheapGoods.goods)+'）が、往復'+yen(cheapGoods.fare)+'込みで総額逆転</span>';
+      }
+    }else{ msg='登録は1店だけ：<b>'+escapeHtml(win.store)+'</b>（総額 '+yen(win.total)+'）'; }
+    if(skipped.length){
+      msg+='<br><span class="small muted">※ 内容量不明のため比較から外した店：'+escapeHtml(skipped.map(function(p){return p.store||"―";}).join("・"))+'</span>';
+    }
+    $("vResult").innerHTML=html+'<div class="verdict win">'+msg+'</div>';
+  });
+  function storeInfo(name){
+    for(var i=0;i<DB.stores.length;i++){ if(DB.stores[i].name===name) return {km:Number(DB.stores[i].km||0),fare:Number(DB.stores[i].fare||0)}; }
+    return {km:0,fare:0};
+  }
+
+  // ============================================================
+  //  設定（既存ロジック。フォルダ層→クラウド層に差し替え）
+  // ============================================================
+  function renderSettings(){
+    $("setCycleDay").value=startDay();
+    renderCatBudgets(); renderStoreMaster(); renderCatMaster();
+    setSync(serverVersion>0?("✓ 同期済み（version "+serverVersion+"）"):"クラウド：データなし");
+  }
+  function renderCatBudgets(){
+    var box=$("catBudgetList"); if(!box) return;
+    var cb=DB.catBudgets||{}; var html="";
+    DB.cats.forEach(function(c){
+      var v=(cb[c.id]!=null&&cb[c.id]>0)?cb[c.id]:"";
+      html+='<div class="item" style="padding:8px 0;"><div class="ic">'+escapeHtml(c.icon)+'</div>'+
+            '<div class="mid"><div class="t">'+escapeHtml(c.name)+'</div></div>'+
+            '<input type="number" inputmode="numeric" min="0" placeholder="円（空欄＝なし）" data-cbid="'+escapeHtml(c.id)+'" value="'+v+'" style="max-width:150px;flex:0 0 auto;text-align:right;"></div>';
+    });
+    box.innerHTML=html;
+  }
+  $("saveCycleBtn").addEventListener("click", function(){
+    var d=Number($("setCycleDay").value);
+    if(!isFinite(d)||d<1){ toast("1〜28の数字を入れてください"); return; }
+    d=Math.min(28,Math.max(1,Math.round(d)));
+    DB.cycleStartDay=d; $("setCycleDay").value=d;
+    save(); toast("締め日を毎月"+d+"日に保存 ✓"); renderHome();
+  });
+  $("saveCatBudgetBtn").addEventListener("click", function(){
+    var inputs=$("catBudgetList").querySelectorAll("[data-cbid]");
+    var cb={};
+    for(var i=0;i<inputs.length;i++){
+      var id=inputs[i].getAttribute("data-cbid");
+      var raw=inputs[i].value.trim(); if(raw==="") continue;
+      var v=Number(raw); if(isFinite(v)&&v>0) cb[id]=Math.round(v);
+    }
+    DB.catBudgets=cb;
+    save(); toast("費目ごとの予算を保存 ✓"); renderHome();
+  });
+  function renderStoreMaster(){
+    var box=$("storeMaster");
+    if(!DB.stores.length){ box.innerHTML='<div class="empty">店がまだありません</div>'; return; }
+    var html="";
+    DB.stores.forEach(function(s){
+      var fare=Number(s.fare||0);
+      var fareStr=fare>0?('往復 '+yen(fare)+' <span class="muted small">(電車/バス)</span>'):'<span class="muted small">交通費 ¥0 (徒歩/チャリ)</span>';
+      html+='<div class="item"><div class="mid"><div class="t">'+escapeHtml(s.name)+'</div>'+
+            '<div class="small">'+fareStr+' ・ 往復 '+(Number(s.km||0))+' km</div></div>'+
+            '<button class="del" data-sn="'+escapeHtml(s.name)+'">削除</button></div>';
+    });
+    box.innerHTML=html;
+    var dels=box.querySelectorAll(".del");
+    for(var i=0;i<dels.length;i++){
+      dels[i].addEventListener("click", function(){
+        var n=this.getAttribute("data-sn");
+        DB.stores=DB.stores.filter(function(s){return s.name!==n;});
+        save(); renderStoreMaster(); refreshStoreDatalists(); toast("削除しました");
+      });
+    }
+  }
+  $("stAddBtn").addEventListener("click", function(){
+    var n=$("stName").value.trim();
+    var kmRaw=$("stKm").value.trim(); var fareRaw=$("stFare").value.trim();
+    var km=Number(kmRaw), fare=Number(fareRaw);
+    if(!n){ toast("店名を入れてください"); return; }
+    var found=false;
+    DB.stores.forEach(function(s){
+      if(s.name===n){ if(kmRaw!=="") s.km=km>=0?km:0; if(fareRaw!=="") s.fare=fare>=0?fare:0; found=true; }
+    });
+    if(!found) DB.stores.push({name:n, km:(kmRaw!==""&&km>=0)?km:0, fare:(fareRaw!==""&&fare>=0)?fare:0});
+    save();
+    $("stName").value=""; $("stKm").value=""; $("stFare").value="";
+    renderStoreMaster(); refreshStoreDatalists();
+    toast(found?"更新しました ✓":"追加しました ✓");
+  });
+  function renderCatMaster(){
+    var box=$("catMaster"); var html="";
+    DB.cats.forEach(function(c){
+      html+='<div class="item"><div class="ic">'+escapeHtml(c.icon)+'</div>'+
+            '<div class="mid"><div class="t">'+escapeHtml(c.name)+'</div></div>'+
+            '<button class="del" data-cid="'+c.id+'">削除</button></div>';
+    });
+    box.innerHTML=html;
+    var dels=box.querySelectorAll(".del");
+    for(var i=0;i<dels.length;i++){
+      dels[i].addEventListener("click", function(){
+        var id=this.getAttribute("data-cid");
+        if(DB.cats.length<=1){ toast("費目は最低1つ必要です"); return; }
+        var used=DB.expenses.some(function(e){return e.catId===id;});
+        if(used && !confirm("この費目を使った支出があります。費目を消しても支出は残ります。削除しますか？")) return;
+        DB.cats=DB.cats.filter(function(c){return c.id!==id;});
+        if(selectedCat===id) selectedCat=DB.cats[0].id;
+        save(); renderCatMaster(); toast("削除しました");
+      });
+    }
+  }
+  $("catAddBtn").addEventListener("click", function(){
+    var name=$("catName").value.trim();
+    var icon=$("catIcon").value.trim()||"📌";
+    if(!name){ toast("費目名を入れてください"); return; }
+    DB.cats.push({id:uid(),name:name,icon:icon});
+    save();
+    $("catName").value=""; $("catIcon").value="";
+    renderCatMaster(); toast("追加しました ✓");
+  });
+
+  // クラウドから読み直す（競合解消・他端末の更新を取り込む）
+  $("reloadCloudBtn").addEventListener("click", function(){
+    setSync("読み込み中…");
+    readVaultRaw().then(function(remote){
+      if(!remote || !remote.ct){ setSync("クラウド：データなし"); toast("クラウドにデータがありません"); return; }
+      return decryptVault(aesKey, remote).then(function(obj){
+        DB=normalize(obj);
+        serverVersion=(typeof remote.version==="number")?remote.version:0;
+        saltCache=b64ToBytes(remote.salt);   // 既存saltに鍵を合わせ直す必要はない（同PIN由来）
+        selectedCat=DB.cats[0]?DB.cats[0].id:null;
+        renderAll(); renderSettings();
+        setSync("✓ 読み直しました（version "+serverVersion+"）");
+        toast("クラウドから読み直しました ✓");
+      }).catch(function(){ toast("復号できませんでした（PINが違う可能性）"); setSync("⚠️ 復号失敗"); });
+    }).catch(function(e){ console.error(e); toast("読み込みに失敗"); setSync("⚠️ 読み込み失敗"); });
+  });
+
+  // Macのデータを取り込む（初回移行）
+  $("migrateFile").addEventListener("change", function(e){
+    var f=e.target.files[0]; if(!f) return;
+    e.target.value="";
+    var reader=new FileReader();
+    reader.onload=function(){
+      try{
+        var d=JSON.parse(reader.result);
+        if(!d || typeof d!=="object") throw 0;
+        // クラウドに既にデータがあれば確認（version>0）
+        var proceed=function(){
+          DB=normalize(d);
+          selectedCat=DB.cats[0]?DB.cats[0].id:null;
+          renderAll();
+          save().then(function(ok){ if(ok){ renderSettings(); toast("Macのデータを取り込んでクラウドへ保存しました ✓"); } });
+        };
+        if(serverVersion>0){
+          if(confirm("クラウドに既にデータがあります。Macのデータで上書きしますか？\n（クラウドの現在のデータは消えます）")) proceed();
+        }else{ proceed(); }
+      }catch(err){ toast("ファイルを読めませんでした"); }
+    };
+    reader.readAsText(f);
+  });
+
+  $("exportBtn").addEventListener("click", function(){
+    var blob=new Blob([JSON.stringify(DB,null,2)],{type:"application/json"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a"); a.href=url; a.download="家計簿バックアップ_"+todayStr()+".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);},1000);
+    toast("書き出しました ✓");
+  });
+  $("wipeBtn").addEventListener("click", function(){
+    if(!confirm("クラウドの家計簿データを初期状態に戻します。元に戻せません。よろしいですか？")) return;
+    DB=defaultData(); viewAnchor=new Date(); selectedCat=DB.cats[0].id;
+    renderAll();
+    save().then(function(ok){ if(ok){ renderSettings(); toast("クラウドを初期化しました"); } });
+  });
+
+  function renderAll(){ renderHome(); renderAdd(); }
+
+  // ============================================================
+  //  PIN ゲート（8桁・既存UX。鍵を導出してvaultを復号 or 初期化）
+  // ============================================================
+  var pinBuf="", pinBusy=false, vaultRemote=null;
+  function drawDots(){
+    var box=$("pinDots"); box.innerHTML="";
+    for(var i=0;i<8;i++){ var d=document.createElement("div"); d.className="d"+(i<pinBuf.length?" f":""); box.appendChild(d); }
+  }
+  function buildPad(){
+    var pad=$("pinPad"); pad.innerHTML="";
+    var keys=["1","2","3","4","5","6","7","8","9","C","0","⌫"];
+    keys.forEach(function(k){
+      var b=document.createElement("button");
+      b.textContent=k; if(k==="C"||k==="⌫") b.className="fn";
+      b.addEventListener("click", function(){ onPinKey(k); });
+      pad.appendChild(b);
+    });
+  }
+  function onPinKey(k){
+    if(pinBusy) return;
+    hide($("pinErr"));
+    if(k==="C"){ pinBuf=""; drawDots(); return; }
+    if(k==="⌫"){ pinBuf=pinBuf.slice(0,-1); drawDots(); return; }
+    if(pinBuf.length>=8) return;
+    pinBuf+=k; drawDots();
+    if(pinBuf.length===8){ pinBusy=true; tryPin(pinBuf); }
+  }
+  // PIN確定 → vault があれば復号、無ければ初回（このPINで新規作成）
+  function tryPin(pin){
+    $("pinLead").textContent="確認中…（少し時間がかかります）";
+    var go;
+    if(vaultRemote && vaultRemote.ct){
+      // 既存vault：そのsaltで鍵を作り復号
+      var salt=b64ToBytes(vaultRemote.salt);
+      go=deriveKey(pin,salt).then(function(key){
+        return decryptVault(key, vaultRemote).then(function(obj){
+          aesKey=key; saltCache=salt;
+          DB=normalize(obj);
+          serverVersion=(typeof vaultRemote.version==="number")?vaultRemote.version:0;
+          finishUnlock(pin);
+        });
+      });
+    }else{
+      // vault無し（初回）：新規saltで鍵を作り、現在のDB（既定）を暗号化して書き込む
+      var newSalt=crypto.getRandomValues(new Uint8Array(16));
+      go=deriveKey(pin,newSalt).then(function(key){
+        aesKey=key; saltCache=newSalt; serverVersion=0;
+        return save().then(function(ok){
+          if(!ok) throw new Error("初回保存に失敗");
+          finishUnlock(pin);
+        });
+      });
+    }
+    go.catch(function(err){
+      pinBusy=false; pinBuf=""; drawDots();
+      $("pinLead").textContent="8桁の数字を入れてください（最初の1回だけ・次から自動）";
+      // 復号失敗＝PIN違い（既存vaultがある時のみ起こりうる）
+      if(vaultRemote && vaultRemote.ct){ showPinErr("あいことばが違うようです。もう一回どうぞ"); }
+      else{ showPinErr("うまく保存できませんでした。電波を確認してもう一度"); console.error(err); }
+    });
+  }
+  function showPinErr(m){ var e=$("pinErr"); e.textContent=m; show(e); }
+  function finishUnlock(pin){
+    try{ localStorage.setItem(LS_PIN, pin); }catch(e){}
+    pinBusy=false; pinBuf="";
+    selectedCat=DB.cats[0]?DB.cats[0].id:null;
+    viewAnchor=new Date();
+    renderAll();
+    gate(null);   // アプリ表示
+    setSync(serverVersion>0?("✓ 同期済み（version "+serverVersion+"）"):"✓ 同期開始");
+  }
+
+  // ============================================================
+  //  起動フロー：Firebase初期化 → 認証 → vault取得 → PIN
+  // ============================================================
+  function initFirebase(){
+    try{
+      fbApp=firebase.initializeApp(firebaseConfig);
+      fbAuth=firebase.auth();
+      fbDb=firebase.database();
+      return true;
+    }catch(e){
+      console.error("Firebase初期化失敗",e);
+      gate("gateSignin");
+      $("signinErr").textContent="アプリの初期化に失敗しました（設定を確認してください）";
+      show($("signinErr"));
+      return false;
+    }
+  }
+
+  function startAuthFlow(){
+    // redirect結果を先に処理（モバイル安定のため signInWithRedirect を使用）
+    fbAuth.getRedirectResult().catch(function(e){
+      console.error("redirect結果取得失敗",e);
+    }).finally(function(){
+      fbAuth.onAuthStateChanged(function(user){
+        if(user){
+          fbUser=user;
+          if((user.email||"").toLowerCase()!==ALLOWED_EMAIL){
+            // 許可外アカウント → 停止
+            gate("gateSignin");
+            show($("signinErr"));
+            $("signinErr").innerHTML="このアカウント（"+escapeHtml(user.email||"不明")+"）では使えません。<br>"+escapeHtml(ALLOWED_EMAIL)+" でサインインしてください。";
+            $("signinBtn").textContent="別のアカウントでサインインし直す";
+            return;
+          }
+          // 認証OK → vault取得 → PINゲートへ
+          afterSignedIn();
+        }else{
+          gate("gateSignin");
+        }
+      });
+    });
+  }
+
+  function afterSignedIn(){
+    gate("gateLoading");
+    loadingMsg("データを確認中…");
+    readVaultRaw().then(function(remote){
+      vaultRemote = (remote && remote.ct) ? remote : null;
+      // PINゲートへ
+      gate("gatePin");
+      if(vaultRemote){
+        $("pinTitle").textContent="あいことば";
+        $("pinLead").textContent="8桁の数字を入れてください（最初の1回だけ・次から自動）";
+      }else{
+        $("pinTitle").textContent="あいことばを決める";
+        $("pinLead").textContent="クラウドはまだ空です。これから使う8桁の数字を決めてください（次から自動）。";
+      }
+      drawDots(); buildPad();
+      // この端末で記憶したPINがあれば自動解錠を試みる
+      var saved=null; try{ saved=localStorage.getItem(LS_PIN); }catch(e){}
+      if(saved && /^\d{8}$/.test(saved) && vaultRemote){
+        pinBuf=saved; pinBusy=true; drawDots();
+        $("pinLead").textContent="自動で開いています…";
+        tryPin(saved);
+      }
+    }).catch(function(e){
+      console.error("vault取得失敗",e);
+      gate("gateSignin");
+      show($("signinErr"));
+      // RTDBアクセス不可＝ルール未設定 or 権限なしが濃厚
+      $("signinErr").innerHTML="クラウドに接続できませんでした。<br><span class='small'>（Firebaseのルール設定が必要な可能性があります）</span>";
+    });
+  }
+
+  $("signinBtn").addEventListener("click", function(){
+    hide($("signinErr"));
+    var provider=new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({prompt:"select_account"});
+    fbAuth.signInWithRedirect(provider).catch(function(e){
+      console.error("サインイン失敗",e);
+      show($("signinErr"));
+      $("signinErr").textContent="サインインを開始できませんでした。"+(e&&e.message?("（"+e.message+"）"):"");
+    });
+  });
+  $("signoutBtn").addEventListener("click", function(){
+    if(!confirm("サインアウトしますか？（このブラウザの記憶も消えます）")) return;
+    try{ localStorage.removeItem(LS_PIN); }catch(e){}
+    aesKey=null; saltCache=null;
+    fbAuth.signOut().then(function(){ location.reload(); });
+  });
+
+  // ---- 起動 ----
+  gate("gateLoading"); loadingMsg("接続中…");
+  if(!("crypto" in window) || !crypto.subtle){
+    gate("gateSignin"); show($("signinErr"));
+    $("signinErr").textContent="このブラウザは暗号化に対応していません（HTTPSで開いてください）。";
+  }else if(initFirebase()){
+    startAuthFlow();
+  }
+
+})();
+</script>
+</body>
+</html>
