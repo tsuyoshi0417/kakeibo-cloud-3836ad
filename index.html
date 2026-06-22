@@ -113,6 +113,56 @@
   .pad button.fn{font-size:18px;color:var(--ink-sub);font-weight:600;}
   .signout{position:fixed;top:10px;right:12px;z-index:60;background:#fff;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--ink-sub);padding:5px 12px;cursor:pointer;}
   .sync-badge{font-size:11px;color:var(--ink-sub);text-align:center;padding:4px 0 2px;}
+
+  /* ===== 目標エンジン ===== */
+  .goal-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:14px;border:1px solid var(--line);}
+  .goal-card.done{border-color:var(--gold);}
+  .goal-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+  .goal-title{font-size:15px;font-weight:700;}
+  .goal-title .ge{margin-right:4px;}
+  .goal-rest-lead{font-size:12px;color:var(--ink-sub);margin-top:10px;}
+  .goal-rest{font-size:34px;font-weight:800;line-height:1.1;letter-spacing:-1px;color:var(--teal);}
+  .goal-rest .yen{font-size:19px;font-weight:700;margin-right:2px;}
+  .goal-card.done .goal-rest{color:var(--gold);}
+  .goal-bar-track{height:12px;background:#efeadd;border-radius:8px;overflow:hidden;margin:11px 0 6px;}
+  .goal-bar-fill{height:100%;background:var(--teal);border-radius:8px;width:0;transition:width .6s ease-out;}
+  .goal-card.done .goal-bar-fill{background:var(--gold);}
+  .goal-sub{display:flex;justify-content:space-between;font-size:13px;color:var(--ink-sub);}
+  .goal-month{margin-top:9px;font-size:13px;color:var(--ok);font-weight:600;}
+  .goal-done-msg{margin-top:11px;font-size:15px;font-weight:700;color:var(--gold);}
+  .goal-done-msg .gbtn-mini{margin-top:9px;}
+  /* 勧誘カード */
+  .invite-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:14px;border:1px dashed var(--teal);}
+  .invite-card.folded{padding:11px 14px;}
+  .invite-card .it{font-size:15px;font-weight:700;}
+  .invite-card .id{font-size:13px;color:var(--ink-sub);margin:5px 0 12px;}
+  .invite-row{display:flex;gap:8px;align-items:center;}
+  .invite-row .grow{flex:1;}
+  .invite-close{background:none;border:none;color:var(--ink-sub);font-size:13px;cursor:pointer;padding:6px;flex:0 0 auto;}
+  .invite-card.folded .invite-foldbtn{background:none;border:none;color:var(--teal);font-weight:700;font-size:14px;cursor:pointer;padding:0;text-align:left;width:100%;}
+  /* ウィザード（オーバーレイ） */
+  .wiz{position:fixed;inset:0;background:rgba(44,42,38,.42);z-index:150;display:flex;align-items:flex-end;justify-content:center;}
+  .wiz-sheet{background:var(--bg);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto;animation:wizup .25s ease-out;}
+  @keyframes wizup{from{transform:translateY(24px);opacity:.6}to{transform:translateY(0);opacity:1}}
+  .wiz h2{font-size:20px;margin-bottom:4px;}
+  .wiz .wlead{color:var(--ink-sub);font-size:14px;margin-bottom:14px;}
+  .wiz-goalchips{display:flex;flex-wrap:wrap;gap:10px;}
+  .wiz-goalchip{padding:14px 14px;border-radius:14px;border:1.5px solid var(--line);background:#fff;font-size:16px;font-weight:700;cursor:pointer;flex:1 1 44%;text-align:center;}
+  .wiz-goalchip:active{background:#efeadd;}
+  .wiz-row{display:flex;gap:10px;}
+  .wiz-row>*{flex:1;}
+  .wiz-period{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+  .wiz-toggle{display:flex;align-items:center;gap:10px;margin:14px 0 4px;padding:13px;border:1.5px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;}
+  .wiz-toggle .box{width:24px;height:24px;border-radius:7px;border:2px solid var(--teal);flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px;}
+  .wiz-toggle.on .box{background:var(--teal);}
+  .wiz-toggle .tx{font-size:14px;font-weight:600;}
+  .wiz-emojiline{display:flex;gap:8px;align-items:center;margin-top:4px;}
+  .wiz-emojiline input{max-width:64px;text-align:center;flex:0 0 auto;}
+  /* 設定タブ：目標 */
+  .goalset-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px dashed var(--line);font-size:14px;}
+  .goalset-row:last-child{border-bottom:none;}
+  .hist-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:7px 0;border-bottom:1px dashed var(--line);}
+  .hist-row:last-child{border-bottom:none;}
 </style>
 </head>
 <body>
@@ -153,6 +203,7 @@
       <div class="m" id="homeMonth">―</div>
       <button id="homeNext" aria-label="次の期">›</button>
     </div>
+    <div id="goalSlot"></div>
     <div class="card center">
       <div class="muted small" id="remainLead">あといくら使える</div>
       <div id="remain" class="big-remain"><span class="yen">¥</span>0</div>
@@ -239,6 +290,12 @@
   <section id="settings" class="page">
     <div class="card">
       <h2 style="margin-bottom:4px;">設定</h2>
+    </div>
+    <div class="card" id="goalSettingCard">
+      <h3 class="sec-title">🎯 目標</h3>
+      <div id="goalSettingBody"></div>
+    </div>
+    <div class="card">
       <h3 class="sec-title">締め日（起算日）</h3>
       <label>毎月この日からを「1ヶ月」とする（1〜28）</label>
       <input type="number" id="setCycleDay" inputmode="numeric" placeholder="例：25" min="1" max="28">
@@ -306,6 +363,45 @@
   <button data-tab="settings"><span class="ti">⚙️</span>設定</button>
 </nav>
 <div class="toast" id="toast"></div>
+
+<!-- ===== 目標ウィザード（オーバーレイ） ===== -->
+<div id="goalWiz" class="wiz hidden">
+  <div class="wiz-sheet">
+    <!-- Step1 -->
+    <div id="wizStep1">
+      <h2>何のため？</h2>
+      <div class="wlead">続ける理由をひとつ。後でいつでも変えられます。</div>
+      <div class="wiz-goalchips" id="wizGoalChips"></div>
+      <div style="height:14px;"></div>
+      <button class="btn sub" id="wizCancel1">あとで</button>
+    </div>
+    <!-- Step2 -->
+    <div id="wizStep2" class="hidden">
+      <h2>いくら・いつまで？</h2>
+      <div class="wlead">そのままでもOK。打ち直すだけで変えられます。</div>
+      <label>目標の名前</label>
+      <div class="wiz-emojiline">
+        <input id="wizEmoji" maxlength="2" value="✈️">
+        <input id="wizName" placeholder="目標の名前" style="flex:1;">
+      </div>
+      <label>目標額（円）</label>
+      <input type="number" id="wizTarget" inputmode="numeric" min="0" placeholder="例：150000">
+      <label>いつまで？（任意）</label>
+      <div class="wiz-period" id="wizPeriod"></div>
+      <input type="month" id="wizDeadline" class="hidden" style="margin-top:8px;">
+      <div class="wiz-toggle on" id="wizRollover">
+        <div class="box">✓</div>
+        <div class="tx">月末に余ったお金を自動でためる</div>
+      </div>
+      <p class="help">使いすぎた月は何も引かれません（責めません）。いつでもOFFにできます。</p>
+      <div style="height:14px;"></div>
+      <button class="btn" id="wizStart">これで始める</button>
+      <div style="height:10px;"></div>
+      <button class="btn sub" id="wizCancel2">あとで</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /appRoot -->
 
 <!-- Firebase JS SDK（gstatic CDN・同期アプリなのでCDN許容）。compat版で読みやすく。 -->
@@ -458,7 +554,9 @@
         {name:"ロピア長浜店",km:7.2,fare:0},
         {name:"ロピア博多店",km:15.8,fare:520}
       ],
-      prices: []
+      prices: [],
+      goal: null,
+      goalsDone: []
     };
   }
   // 既存 load() と同じ正規化ロジック（保存先がオブジェクトに変わっただけ）
@@ -491,8 +589,33 @@
         if(p.qty===null||p.qty===undefined||p.qty===""){ p.qty=null; }
         else{ var q=Number(p.qty); p.qty=(isFinite(q)&&q>0)?q:null; }
       });
+      // --- 目標エンジン：欠損は既定で吸収（SCHEMA_VERSION据え置き） ---
+      d.goal = normalizeGoal(d.goal);
+      d.goalsDone = Array.isArray(d.goalsDone) ? d.goalsDone.map(normalizeGoal).filter(function(g){return g;}) : [];
       return d;
     }catch(e){ return defaultData(); }
+  }
+  // 目標1個の正規化。null可。数値は負/NaN→0、history配列化。
+  function normalizeGoal(g){
+    if(!g || typeof g!=="object" || Array.isArray(g)) return null;
+    var t=Number(g.target); if(!isFinite(t)||t<0) t=0;
+    var s=Number(g.saved);  if(!isFinite(s)||s<0) s=0;
+    var hist=Array.isArray(g.history)?g.history.filter(function(h){return h&&typeof h==="object";}).map(function(h){
+      var a=Number(h.amount); if(!isFinite(a)) a=0;
+      return {date:String(h.date||""), amount:a, note:String(h.note||"")};
+    }):[];
+    return {
+      id: g.id || uid(),
+      emoji: (typeof g.emoji==="string"&&g.emoji)?g.emoji:"🎯",
+      name: (typeof g.name==="string"&&g.name)?g.name:"目標",
+      target: Math.round(t),
+      saved: Math.round(s),
+      deadline: (typeof g.deadline==="string"&&/^\d{4}-\d{2}$/.test(g.deadline))?g.deadline:"",
+      autoRollover: (g.autoRollover===false)?false:true,
+      createdAt: g.createdAt || Date.now(),
+      lastRolloverCycle: (typeof g.lastRolloverCycle==="string")?g.lastRolloverCycle:"",
+      history: hist
+    };
   }
 
   var DB = defaultData();
@@ -562,14 +685,21 @@
   function cycleRemain(catBudgets,catSpent){ var r=0; Object.keys(catBudgets).forEach(function(id){ r+=Number(catBudgets[id]||0)-Number(catSpent[id]||0); }); return r; }
   // 当期（今日基準）の費目別支出合計。トーストの残額計算とホームで共用（二重計算しない）。
   function currentCatSpent(){
-    var c=cycleOf(new Date());
-    var catSpent={};
-    DB.expenses.forEach(function(e){
-      if(inCycle(e.date||"",c)) catSpent[e.catId]=(catSpent[e.catId]||0)+Number(e.amount||0);
-    });
-    return catSpent;
+    return catSpentFor(cycleOf(new Date()));
   }
   function cycleBudgetTotal(catBudgets){ var t=0; Object.keys(catBudgets).forEach(function(id){ t+=Number(catBudgets[id]||0); }); return t; }
+  // 指定した期の費目別支出合計（既存inCycleを流用・二重計算しない）
+  function catSpentFor(cycle){
+    var cs={};
+    DB.expenses.forEach(function(e){
+      if(inCycle(e.date||"",cycle)) cs[e.catId]=(cs[e.catId]||0)+Number(e.amount||0);
+    });
+    return cs;
+  }
+  // 指定した期の残額（予算設定済み費目の 予算−その期の支出）。
+  function cycleRemainFor(cycle){
+    return cycleRemain(DB.catBudgets||{}, catSpentFor(cycle));
+  }
   function nowStr(){ var d=new Date(),p=function(n){return String(n).padStart(2,"0");}; return p(d.getHours())+":"+p(d.getMinutes()); }
   var toastTimer;
   function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(function(){ t.classList.remove("show"); },2200); }
@@ -603,6 +733,9 @@
   //  ホーム（既存ロジックそのまま）
   // ============================================================
   function renderHome(){
+    // 目標：自動繰越（未処理の過去期分を1回だけ加算）→ 目標スロット描画
+    runAutoRollover();
+    renderGoalSlot();
     var c=cycleOf(viewAnchor);
     var todayCycle=cycleOf(new Date());
     var isCurrent=ymd(c.start)===ymd(todayCycle.start);
@@ -916,6 +1049,7 @@
   // ============================================================
   function renderSettings(){
     $("setCycleDay").value=startDay();
+    renderGoalSetting();
     renderCatBudgets(); renderStoreMaster(); renderCatMaster();
     setSync(serverVersion>0?("✓ 同期済み（version "+serverVersion+"）"):"クラウド：データなし");
   }
@@ -1070,6 +1204,299 @@
     renderAll();
     save().then(function(ok){ if(ok){ renderSettings(); toast("クラウドを初期化しました"); } });
   });
+
+  // ============================================================
+  //  目標エンジン（MEMORY ethical-engagement-design-sdt / 社長決定）
+  //  ・既存の期(§10)・残額・bar-fillを流用。新色は足さない。
+  //  ・ダークパターン禁止：射幸/罪悪感/偽の緊急なし。静かに祝う。
+  // ============================================================
+  var INVITE_DISMISS_KEY="kakeibo_goal_invite_dismiss_v1";  // 勧誘を閉じた回数（この端末のみ・畳む判定用）
+  // 費目別の既定額（ウィザードの目標額プリセット）
+  var GOAL_PRESETS=[
+    {key:"trip",  emoji:"✈️", name:"旅行",      target:150000},
+    {key:"cat",   emoji:"🐈", name:"保護猫さん", target:100000},
+    {key:"safety",emoji:"🛟", name:"もしもの備え",target:100000},
+    {key:"reward",emoji:"🎁", name:"ごほうび",   target:30000},
+    {key:"home",  emoji:"🏠", name:"暮らし",     target:50000},
+    {key:"free",  emoji:"✏️", name:"自分で書く", target:50000}
+  ];
+
+  // --- 自動繰越：当期 ≠ goal.lastRolloverCycle なら、未処理の過去期分を saved に1回だけ加算 ---
+  function runAutoRollover(){
+    var g=DB.goal;
+    if(!g || !g.autoRollover) return;
+    var todayCycle=cycleOf(new Date());
+    var curKey=ymd(todayCycle.start);
+    if(g.lastRolloverCycle===curKey) return;   // 既に当期まで処理済み＝多重加算しない
+
+    var changed=false;
+    if(!g.lastRolloverCycle){
+      // 初回：過去に遡って積まない（安全側）。基準だけ当期に合わせる。
+      g.lastRolloverCycle=curKey;
+      changed=true;
+    }else{
+      // lastRolloverCycle の次の期から、当期の手前まで（＝締め日を跨いで完了した過去期）を1回ずつ加算。
+      var cursor=cycleOf(parseYmd(g.lastRolloverCycle));   // 最後に処理した期
+      var guard=0;
+      while(guard++<600){
+        var nextStart=new Date(cursor.start.getFullYear(), cursor.start.getMonth()+1, cursor.start.getDate());
+        var nextCycle=cycleOf(nextStart);
+        if(ymd(nextCycle.start)===curKey) break;            // 当期は未完了＝加算しない
+        // この nextCycle は完了した過去期 → その残額のプラス分を積む
+        var add=Math.max(0, cycleRemainFor(nextCycle));     // 使いすぎ(マイナス)は0扱い＝責めない
+        if(add>0){
+          g.saved += add;
+          g.history.push({date:ymd(nextCycle.end), amount:add, note:"自動積立（締め日の余り）"});
+          changed=true;
+        }
+        cursor=nextCycle;
+        if(ymd(nextCycle.start)>=curKey) break;             // 念のための上限
+      }
+      g.lastRolloverCycle=curKey;
+      changed=true;
+    }
+    if(changed) save();
+  }
+  function parseYmd(s){
+    var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s||""));
+    if(!m) return new Date();
+    return new Date(Number(m[1]), Number(m[2])-1, Number(m[3]));
+  }
+
+  // --- ホームの目標スロット（最上段）：目標カード or 勧誘カード ---
+  function renderGoalSlot(){
+    var slot=$("goalSlot"); if(!slot) return;
+    var g=DB.goal;
+    if(!g){ slot.innerHTML=inviteCardHtml(); bindInvite(slot); return; }
+
+    var rest=Math.max(0, g.target - g.saved);
+    var pct=g.target>0 ? Math.min(100, Math.round(g.saved/g.target*100)) : 0;
+    var done=g.saved>=g.target && g.target>0;
+
+    // 「今月+¥」見込み＝当期(isCurrent)・予算あり・残額>0 の時だけ（既存remain再利用）
+    var todayCycle=cycleOf(new Date());
+    var isCurrentView=ymd(cycleOf(viewAnchor).start)===ymd(todayCycle.start);
+    var hasBudget=Object.keys(DB.catBudgets||{}).length>0;
+    var monthRemain=cycleRemainFor(todayCycle);
+    var showMonth=g.autoRollover && isCurrentView && hasBudget && monthRemain>0 && !done;
+
+    var html='<div class="goal-card'+(done?' done':'')+'">';
+    html+='<div class="goal-head"><span class="goal-title"><span class="ge">'+escapeHtml(g.emoji)+'</span>'+escapeHtml(g.name)+'まで</span></div>';
+    if(done){
+      html+='<div class="goal-bar-track"><div class="goal-bar-fill" style="width:100%"></div></div>';
+      html+='<div class="goal-sub"><span>'+yen(g.saved)+'</span><span>'+yen(g.target)+'</span></div>';
+      html+='<div class="goal-done-msg">達成 🎉<div><button class="btn sub mini gbtn-mini" id="goalDoneNext">次の目標を決める？</button></div></div>';
+    }else{
+      html+='<div class="goal-rest-lead">あと</div>';
+      html+='<div class="goal-rest"><span class="yen">¥</span>'+rest.toLocaleString("ja-JP")+'</div>';
+      html+='<div class="goal-bar-track"><div class="goal-bar-fill" id="goalBarFill" style="width:0"></div></div>';
+      html+='<div class="goal-sub"><span>'+yen(g.saved)+'</span><span>'+yen(g.target)+'</span></div>';
+      if(showMonth){ html+='<div class="goal-month">この調子で月末に +'+yen(monthRemain)+' ためられそう</div>'; }
+    }
+    html+='</div>';
+    slot.innerHTML=html;
+
+    // バーを 0% → 実% へ伸ばす（既存の .bar-fill と同じ手触り）。
+    // setTimeout で「描画後・最新要素」に対し幅をセット＝連続renderでも最後が勝つ・transitionが効く。
+    if(!done){
+      var w=Math.max(2,pct);
+      setTimeout(function(){ var f2=$("goalBarFill"); if(f2) f2.style.width=w+"%"; }, 40);
+    }
+    var nextBtn=$("goalDoneNext");
+    if(nextBtn){ nextBtn.addEventListener("click", function(){ archiveAndRestartGoal(); }); }
+  }
+  function inviteCardHtml(){
+    var dismiss=inviteDismissCount();
+    if(dismiss>=3){
+      return '<div class="invite-card folded"><button class="invite-foldbtn" id="inviteOpen">🎯 目標を決める</button></div>';
+    }
+    return '<div class="invite-card">'+
+      '<div class="invite-row"><div class="grow"><div class="it">🎯 目標を決めませんか？</div>'+
+      '<div class="id">旅行・保護猫さん・もしもの備え…。続ける理由がひとつあると、家計がぐっと楽しくなります。</div></div>'+
+      '<button class="invite-close" id="inviteClose" aria-label="閉じる">×</button></div>'+
+      '<button class="btn mini" id="inviteStart" style="width:auto;">🎯 目標を決める</button></div>';
+  }
+  function bindInvite(slot){
+    var s=slot.querySelector("#inviteStart"); if(s) s.addEventListener("click", openGoalWizard);
+    var o=slot.querySelector("#inviteOpen");  if(o) o.addEventListener("click", openGoalWizard);
+    var c=slot.querySelector("#inviteClose"); if(c) c.addEventListener("click", function(){ bumpInviteDismiss(); renderGoalSlot(); });
+  }
+  function inviteDismissCount(){ try{ return Number(localStorage.getItem(INVITE_DISMISS_KEY)||0)||0; }catch(e){ return 0; } }
+  function bumpInviteDismiss(){ try{ localStorage.setItem(INVITE_DISMISS_KEY, String(inviteDismissCount()+1)); }catch(e){} }
+
+  // --- ウィザード ---
+  var wizState={preset:null, rollover:true, deadline:""};
+  function openGoalWizard(){
+    wizState={preset:null, rollover:true, deadline:""};
+    show($("goalWiz"));
+    $("wizStep1").classList.remove("hidden");
+    $("wizStep2").classList.add("hidden");
+    buildGoalChips();
+  }
+  function closeGoalWizard(){ hide($("goalWiz")); }
+  function buildGoalChips(){
+    var box=$("wizGoalChips"); box.innerHTML="";
+    GOAL_PRESETS.forEach(function(p){
+      var b=document.createElement("div");
+      b.className="wiz-goalchip";
+      b.textContent=p.emoji+" "+p.name;
+      b.addEventListener("click", function(){ wizState.preset=p; goWizStep2(p); });
+      box.appendChild(b);
+    });
+  }
+  function goWizStep2(p){
+    $("wizStep1").classList.add("hidden");
+    $("wizStep2").classList.remove("hidden");
+    $("wizEmoji").value=p.emoji;
+    $("wizName").value=(p.key==="free")?"":p.name;
+    $("wizTarget").value=p.target;
+    wizState.rollover=true; $("wizRollover").classList.add("on");
+    wizState.deadline=""; $("wizDeadline").classList.add("hidden"); $("wizDeadline").value="";
+    buildPeriodChips();
+  }
+  function buildPeriodChips(){
+    var box=$("wizPeriod"); box.innerHTML="";
+    var opts=[{k:"none",t:"なし"},{k:"6m",t:"半年"},{k:"1y",t:"1年"},{k:"custom",t:"自分で"}];
+    opts.forEach(function(o){
+      var b=document.createElement("div");
+      b.className="chip"+(o.k==="none"?" on":"");
+      b.textContent=o.t;
+      b.addEventListener("click", function(){
+        var chips=box.querySelectorAll(".chip"); for(var i=0;i<chips.length;i++) chips[i].classList.remove("on");
+        b.classList.add("on");
+        var dl="";
+        if(o.k==="6m") dl=addMonthsYm(6);
+        else if(o.k==="1y") dl=addMonthsYm(12);
+        if(o.k==="custom"){ $("wizDeadline").classList.remove("hidden"); wizState.deadline=$("wizDeadline").value||""; }
+        else{ $("wizDeadline").classList.add("hidden"); wizState.deadline=dl; }
+      });
+      box.appendChild(b);
+    });
+  }
+  function addMonthsYm(n){
+    var d=new Date(); d=new Date(d.getFullYear(), d.getMonth()+n, 1);
+    return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+  }
+  $("wizDeadline").addEventListener("change", function(){ wizState.deadline=this.value||""; });
+  $("wizRollover").addEventListener("click", function(){
+    wizState.rollover=!wizState.rollover;
+    this.classList.toggle("on", wizState.rollover);
+  });
+  $("wizCancel1").addEventListener("click", function(){ bumpInviteDismiss(); closeGoalWizard(); renderGoalSlot(); });
+  $("wizCancel2").addEventListener("click", function(){ bumpInviteDismiss(); closeGoalWizard(); renderGoalSlot(); });
+  $("wizStart").addEventListener("click", function(){
+    var name=$("wizName").value.trim()||(wizState.preset?wizState.preset.name:"目標");
+    var emoji=$("wizEmoji").value.trim()||(wizState.preset?wizState.preset.emoji:"🎯");
+    var target=Number($("wizTarget").value);
+    if(!isFinite(target)||target<=0){ toast("目標額を入れてください"); return; }
+    var deadline=wizState.deadline||"";
+    if(deadline && !/^\d{4}-\d{2}$/.test(deadline)) deadline="";
+    DB.goal=normalizeGoal({
+      id:uid(), emoji:emoji, name:name, target:Math.round(target), saved:0,
+      deadline:deadline, autoRollover:wizState.rollover, createdAt:Date.now(),
+      lastRolloverCycle:ymd(cycleOf(new Date()).start), history:[]
+    });
+    save();
+    closeGoalWizard();
+    // ホームへ戻して、バーが0%→実%へ伸びるのを見せる（switchToHome内のrenderHomeがrenderGoalSlotを呼ぶ＝二重描画しない）
+    switchToHome();
+    toast("目標をセットしました ✓");
+  });
+  function switchToHome(){
+    var pages=document.querySelectorAll(".page");
+    for(var j=0;j<pages.length;j++) pages[j].classList.remove("on");
+    $("home").classList.add("on");
+    for(var k=0;k<tabBtns.length;k++) tabBtns[k].classList.remove("on");
+    for(var t=0;t<tabBtns.length;t++){ if(tabBtns[t].getAttribute("data-tab")==="home") tabBtns[t].classList.add("on"); }
+    window.scrollTo(0,0);
+    renderHome();
+  }
+
+  // --- 設定タブ：目標の編集 ---
+  function renderGoalSetting(){
+    var box=$("goalSettingBody"); if(!box) return;
+    var g=DB.goal;
+    if(!g){
+      box.innerHTML='<p class="help">続ける理由をひとつ決めると、月末の余りを自動でためられます。</p>'+
+        '<div style="height:8px;"></div><button class="btn sub" id="goalSetNew">🎯 目標を決める</button>';
+      var nb=$("goalSetNew"); if(nb) nb.addEventListener("click", openGoalWizard);
+      return;
+    }
+    var rest=Math.max(0,g.target-g.saved);
+    var html='';
+    html+='<div class="goalset-row"><span>いま</span><span><b>'+yen(g.saved)+'</b> / '+yen(g.target)+'（あと '+yen(rest)+'）</span></div>';
+    html+='<label>絵文字・名前</label><div class="wiz-emojiline"><input id="gsEmoji" maxlength="2" value="'+escapeHtml(g.emoji)+'"><input id="gsName" value="'+escapeHtml(g.name)+'" style="flex:1;"></div>';
+    html+='<label>目標額（円）</label><input type="number" id="gsTarget" inputmode="numeric" min="0" value="'+g.target+'">';
+    html+='<label>いつまで（任意・YYYY-MM）</label><input type="month" id="gsDeadline" value="'+escapeHtml(g.deadline||"")+'">';
+    html+='<div class="wiz-toggle '+(g.autoRollover?'on':'')+'" id="gsRollover"><div class="box">'+(g.autoRollover?'✓':'')+'</div><div class="tx">月末に余ったお金を自動でためる</div></div>';
+    html+='<div style="height:8px;"></div><button class="btn" id="gsSave">目標を保存</button>';
+    html+='<div style="height:10px;"></div>';
+    html+='<div class="wiz-row"><button class="btn sub" id="gsAddManual">＋¥ ためる</button><button class="btn sub" id="gsSwitch">目標を切り替え</button></div>';
+    // history
+    if(g.history.length){
+      html+='<details style="margin-top:10px;"><summary>ためた記録（'+g.history.length+'件・取り消せます）</summary><div id="gsHist" style="margin-top:6px;">';
+      g.history.slice().reverse().forEach(function(h,ri){
+        var idx=g.history.length-1-ri;
+        html+='<div class="hist-row"><span>'+escapeHtml(h.date||"")+' <span class="muted small">'+escapeHtml(h.note||"")+'</span></span>'+
+              '<span>'+signedYen(h.amount)+' <button class="del" data-hidx="'+idx+'">取消</button></span></div>';
+      });
+      html+='</div></details>';
+    }
+    box.innerHTML=html;
+
+    $("gsRollover").addEventListener("click", function(){
+      this.classList.toggle("on");
+      var on=this.classList.contains("on");
+      this.querySelector(".box").textContent=on?"✓":"";
+    });
+    $("gsSave").addEventListener("click", function(){
+      var t=Number($("gsTarget").value);
+      if(!isFinite(t)||t<=0){ toast("目標額を入れてください"); return; }
+      g.emoji=$("gsEmoji").value.trim()||g.emoji;
+      g.name=$("gsName").value.trim()||g.name;
+      g.target=Math.round(t);
+      var dl=$("gsDeadline").value||"";
+      g.deadline=/^\d{4}-\d{2}$/.test(dl)?dl:"";
+      g.autoRollover=$("gsRollover").classList.contains("on");
+      save(); renderGoalSetting(); toast("目標を保存しました ✓");
+    });
+    $("gsAddManual").addEventListener("click", function(){
+      var v=prompt("いくらためますか？（円）");
+      if(v==null) return;
+      var n=Number(v);
+      if(!isFinite(n)||n<=0){ toast("数字を入れてください"); return; }
+      g.saved+=Math.round(n);
+      g.history.push({date:todayStr(), amount:Math.round(n), note:"手動でためた"});
+      save(); renderGoalSetting(); toast("ためました ✓");
+    });
+    $("gsSwitch").addEventListener("click", function(){
+      if(!confirm("いまの目標を「おわり」にして、新しい目標を決めますか？\n（今の目標は記録に残ります・消えません）")) return;
+      archiveAndRestartGoal();
+    });
+    var dels=box.querySelectorAll("[data-hidx]");
+    for(var i=0;i<dels.length;i++){
+      dels[i].addEventListener("click", function(){
+        var idx=Number(this.getAttribute("data-hidx"));
+        var h=g.history[idx]; if(!h) return;
+        if(!confirm("この記録（"+signedYen(h.amount)+"）を取り消しますか？")) return;
+        g.saved=Math.max(0, g.saved - Number(h.amount||0));
+        g.history.splice(idx,1);
+        save(); renderGoalSetting(); toast("取り消しました");
+      });
+    }
+  }
+  // いまの目標を goalsDone へ退避（消さない）→ 次の目標ウィザードへ
+  function archiveAndRestartGoal(){
+    if(DB.goal){
+      var done={};
+      Object.keys(DB.goal).forEach(function(k){ done[k]=DB.goal[k]; });
+      done.endedAt=Date.now();
+      DB.goalsDone.push(done);
+    }
+    DB.goal=null;
+    save();
+    openGoalWizard();
+  }
 
   function renderAll(){ renderHome(); renderAdd(); }
 
