@@ -1118,27 +1118,40 @@
     }
   }
 
+  // 許可外アカウントを弾く時に、再ループしないよう一度だけ署名解除する
+  var rejecting=false;
+
+  // 認証は signInWithPopup（主方式）。リダイレクト復帰の結果取得に依存しないため
+  // GitHub Pages × Firebase authDomain 別ドメインでも無限ループしない。
+  // ここでは「自動リダイレクト/自動サインイン」は一切しない。状態を監視するだけ。
   function startAuthFlow(){
-    // redirect結果を先に処理（モバイル安定のため signInWithRedirect を使用）
-    fbAuth.getRedirectResult().catch(function(e){
-      console.error("redirect結果取得失敗",e);
+    // 永続化を browserLocalPersistence に固定（次回はサインイン済みで自動表示）。
+    fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(e){
+      console.error("persistence設定失敗",e);
     }).finally(function(){
+      // onAuthStateChanged だけで確定。null でも「サインインボタンを出す」だけ＝再サインインを誘発しない。
       fbAuth.onAuthStateChanged(function(user){
-        if(user){
-          fbUser=user;
-          if((user.email||"").toLowerCase()!==ALLOWED_EMAIL){
-            // 許可外アカウント → 停止
+        if(!user){
+          if(rejecting) return; // signOut() 直後の null は無視（ループ防止）
+          gate("gateSignin");
+          return;
+        }
+        fbUser=user;
+        if((user.email||"").toLowerCase()!==ALLOWED_EMAIL){
+          // 許可外アカウント → signOut して停止。自動で再サインインはしない。
+          rejecting=true;
+          var badEmail=user.email||"不明";
+          fbAuth.signOut().catch(function(){}).finally(function(){
+            fbUser=null; rejecting=false;
             gate("gateSignin");
             show($("signinErr"));
-            $("signinErr").innerHTML="このアカウント（"+escapeHtml(user.email||"不明")+"）では使えません。<br>"+escapeHtml(ALLOWED_EMAIL)+" でサインインしてください。";
-            $("signinBtn").textContent="別のアカウントでサインインし直す";
-            return;
-          }
-          // 認証OK → vault取得 → PINゲートへ
-          afterSignedIn();
-        }else{
-          gate("gateSignin");
+            $("signinErr").innerHTML="このアカウント（"+escapeHtml(badEmail)+"）では使えません。<br>"+escapeHtml(ALLOWED_EMAIL)+" でサインインしてください。";
+            $("signinBtn").textContent="別のアカウントでサインイン";
+          });
+          return;
         }
+        // 認証OK → vault取得 → PINゲートへ
+        afterSignedIn();
       });
     });
   }
@@ -1174,14 +1187,31 @@
     });
   }
 
+  var signingIn=false;
   $("signinBtn").addEventListener("click", function(){
+    if(signingIn) return;       // 二度押しでポップアップ多重を防ぐ
+    signingIn=true;
     hide($("signinErr"));
     var provider=new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({prompt:"select_account"});
-    fbAuth.signInWithRedirect(provider).catch(function(e){
-      console.error("サインイン失敗",e);
-      show($("signinErr"));
-      $("signinErr").textContent="サインインを開始できませんでした。"+(e&&e.message?("（"+e.message+"）"):"");
+    // signInWithPopup（主方式）。成功時は onAuthStateChanged が拾うのでここでは何もしない。
+    fbAuth.signInWithPopup(provider).then(function(){
+      signingIn=false; // 成否は onAuthStateChanged が処理
+    }).catch(function(e){
+      signingIn=false;
+      var code=e&&e.code?e.code:"";
+      console.error("サインイン失敗",code,e);
+      // ポップアップが閉じられた/ブロックされた → 優しく案内。再サインインは自動でしない（ループ防止）。
+      if(code==="auth/popup-closed-by-user" || code==="auth/cancelled-popup-request"){
+        show($("signinErr"));
+        $("signinErr").textContent="サインインがキャンセルされました。もう一度どうぞ。";
+      }else if(code==="auth/popup-blocked"){
+        show($("signinErr"));
+        $("signinErr").textContent="ポップアップがブロックされました。ブラウザのポップアップ許可を確認して、もう一度どうぞ。";
+      }else{
+        show($("signinErr"));
+        $("signinErr").textContent="サインインできませんでした。もう一度どうぞ。"+(e&&e.message?("（"+e.message+"）"):"");
+      }
     });
   });
   $("signoutBtn").addEventListener("click", function(){
