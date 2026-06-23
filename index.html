@@ -88,7 +88,7 @@
   .help{font-size:12px;color:var(--ink-sub);margin-top:4px;}
   .warn-flag{display:inline-block;background:#fbf3e0;color:var(--warn);font-weight:700;font-size:12px;padding:2px 7px;border-radius:8px;white-space:nowrap;}
   .warn-note{font-size:12px;color:var(--warn);background:#fbf3e0;border-radius:8px;padding:7px 10px;margin-top:6px;}
-  .mirror-card{background:transparent;box-shadow:none;border:1px solid var(--line);padding:14px 16px;}
+  .mirror-card{background:transparent;box-shadow:none;border:1px solid var(--line);border-left:3px solid var(--line);padding:14px 16px;}
   .mirror-card .sec-title{color:var(--ink-sub);font-size:12px;font-weight:600;letter-spacing:0;}
   .mirror-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;}
   .mirror-row .mtxt{font-size:15px;font-weight:600;color:var(--ink);}
@@ -109,6 +109,21 @@
   .subrow:last-child{border-bottom:none;}
   .subrow .sl{color:var(--ink-sub);}
   .subrow .sv{font-weight:600;}
+
+  /* ===== ふりかえりカード（鏡と同じ従属箱の流儀）===== */
+  .review-card{background:transparent;box-shadow:none;border:1px solid var(--line);border-left:3px solid var(--teal);padding:14px 16px;}
+  .review-card .sec-title{color:var(--ink-sub);font-size:12px;font-weight:600;letter-spacing:0;}
+  .review-summary{font-size:14px;color:var(--ink);line-height:1.55;}
+  .review-summary b{font-weight:700;font-size:15px;}
+  .review-convert{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);}
+  .review-convert .rc-line{font-size:13px;color:var(--ink-sub);line-height:1.5;}
+  .review-convert .rc-line b{color:var(--ink);font-weight:700;}
+  .review-btns{display:flex;gap:8px;margin-top:12px;}
+  .review-btns .btn{flex:1;width:auto;padding:12px 8px;font-size:14px;}
+  .review-btns .btn.sub{font-weight:600;}
+  .rc-amounts{display:flex;gap:6px;margin-top:8px;}
+  .rc-amounts .chip{flex:1;padding:9px 8px;font-size:14px;text-align:center;border-width:1px;}
+  .rc-amounts .chip.on{background:#fff;border:1.5px solid var(--teal);color:var(--teal);font-weight:700;}
 
   /* ===== ゲート（サインイン / PIN）===== */
   .gate{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;}
@@ -239,6 +254,7 @@
       <h3 class="sec-title">費目別に使った額</h3>
       <div id="catBars"><div class="empty">まだ支出がありません</div></div>
     </div>
+    <div id="reviewCard"></div>
   </section>
 
   <!-- 入力 -->
@@ -787,7 +803,7 @@
     var inner=lines.map(function(l){ return l; }).join("");
     // データが薄い初期だけ（datedな価格記録が3件未満）、末尾に「ここは育つ」一文。3件以上で自動で消える。
     var grow=(dated.length<3)?'<div class="mirror-grow">記録がたまるほど、ここで前回との差が見えるようになります</div>':'';
-    slot.innerHTML='<div class="card mirror-card"><h3 class="sec-title">記録の鏡</h3>'+inner+grow+'</div>';
+    slot.innerHTML='<div class="card mirror-card"><h3 class="sec-title">🔁 記録の鏡</h3>'+inner+grow+'</div>';
   }
   // 1品ぶんの行。過去の同名(name+unit)記録と「今回/前回」を中立に並べ、安い時だけ静かに声かけ。
   function buildMirrorLine(p, dated){
@@ -822,12 +838,92 @@
     return '<div class="mirror-row"><span class="mtxt">'+storeTxt+nameTxt+' '+yen(cur.price)+'</span></div>'+cmp+msg;
   }
 
+  // ふりかえりカード（FP第1弾）。事実（モノ・数字）＋本人の願い（目標）だけ。
+  // 「あなた」主語・煽り・評価語は出さない。出ないのが正常（空欄に説明文を出さない）。
+  var reviewPick=1000;  // 目標へ回す金額の選択（既定¥1,000・タップで変更・再描画で保持）
+  function renderReview(){
+    var slot=$("reviewCard"); if(!slot) return;
+    var c=cycleOf(viewAnchor);
+    var todayCycle=cycleOf(new Date());
+    var isCurrent=ymd(c.start)===ymd(todayCycle.start);
+    var spentByCat=catSpentFor(c);
+    var ids=Object.keys(spentByCat);
+    // 当期 expenses が0件 → 枠ごと消す（鏡と同じ＝出ないのが正常）
+    if(!ids.length){ slot.innerHTML=""; return; }
+
+    // 経過率（当期のみゲートに使う・過去期は完了済みなので常にサマリを出す）
+    var total=Math.round((c.next-c.start)/86400000); if(total<1) total=1;
+    var now=new Date(); var today0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    var elapsed=Math.round((today0-c.start)/86400000); if(elapsed<0) elapsed=0; if(elapsed>total) elapsed=total;
+    var ratio=elapsed/total;
+
+    // 当期かつ経過率<50% → カードを完全に非表示（1行も出さない・記録の鏡と被らせない）。
+    if(isCurrent && ratio<0.5){ slot.innerHTML=""; return; }
+
+    // ブロック1：期サマリ（最大費目1つ＋構成比だけ）
+    var total2=0; ids.forEach(function(id){ total2+=Number(spentByCat[id]||0); });
+    var topId=null, topV=-1;
+    ids.forEach(function(id){ var v=Number(spentByCat[id]||0); if(v>topV){ topV=v; topId=id; } });
+    var cat=catById(topId);
+    var pct=total2>0?Math.round(topV/total2*100):0;
+    // 経過率≥80%（過去期は完了扱い＝断定形）→「この期、いちばんは…」、80%未満→「いまのところ、…」
+    var settled = !isCurrent || ratio>=0.8;
+    var lead = settled ? "この期、いちばんは" : "いまのところ、いちばんは";
+    var summary='<div class="review-summary">'+lead+' '+escapeHtml(cat.icon)+escapeHtml(cat.name)+
+                ' <b>'+yen(topV)+'</b>（全体の'+pct+'%）</div>';
+
+    // ブロック2：目標への変換（黒字基調のときだけ＝赤字の月に夢を出さない）。
+    // 条件：goalあり ＆ 当期 ＆ 予算設定あり ＆ 当期残額>0 ＆ 未却下。
+    var convert="";
+    var g=DB.goal;
+    var hasBudget=Object.keys(DB.catBudgets||{}).length>0;
+    var remain=cycleRemainFor(c);
+    var dismissedCycle=""; try{ dismissedCycle=localStorage.getItem("kakeibo_review_dismiss_v1")||""; }catch(e){}
+    var dismissed = dismissedCycle===ymd(c.start);
+    if(g && isCurrent && hasBudget && remain>0 && !dismissed){
+      var picks=[500,1000,3000];
+      if(picks.indexOf(reviewPick)<0) reviewPick=1000;  // 念のため正規化
+      var X=reviewPick, yearV=X*12;
+      var chips=picks.map(function(p){
+        return '<button class="chip'+(p===X?" on":"")+'" data-amt="'+p+'">'+yen(p)+'</button>';
+      }).join("");
+      convert='<div class="review-convert">'+
+        '<div class="rc-amounts" id="reviewAmts">'+chips+'</div>'+
+        '<div class="rc-line">もし月<b>'+yen(X)+'</b>を'+escapeHtml(g.name)+'に回したら、年<b>'+yen(yearV)+'</b></div>'+
+        '<div class="review-btns">'+
+          '<button class="btn" id="reviewAdd">少し回す ￥'+X.toLocaleString("ja-JP")+'</button>'+
+          '<button class="btn sub" id="reviewSkip">このままでいい</button>'+
+        '</div></div>';
+    }
+
+    slot.innerHTML='<div class="card review-card"><h3 class="sec-title">📖 ふりかえり</h3>'+summary+convert+'</div>';
+
+    var amts=$("reviewAmts");
+    if(amts){
+      var btns=amts.querySelectorAll(".chip");
+      for(var i=0;i<btns.length;i++){ (function(b){ b.addEventListener("click", function(){
+        reviewPick=Number(b.getAttribute("data-amt"))||1000; renderReview();
+      }); })(btns[i]); }
+    }
+    var addBtn=$("reviewAdd");
+    if(addBtn){ addBtn.addEventListener("click", function(){
+      var amt=reviewPick;
+      if(addToGoal(amt, "ふりかえりから")){ save(); toast(DB.goal.name+"に ¥"+amt.toLocaleString("ja-JP")+" ためました ✓"); renderHome(); }
+    }); }
+    var skipBtn=$("reviewSkip");
+    if(skipBtn){ skipBtn.addEventListener("click", function(){
+      try{ localStorage.setItem("kakeibo_review_dismiss_v1", ymd(cycleOf(viewAnchor).start)); }catch(e){}
+      renderReview();  // 変換ブロックだけ消す（サマリは残す）
+    }); }
+  }
+
   function renderHome(){
     // 目標：自動繰越（未処理の過去期分を1回だけ加算）→ 締め日リセットの挨拶 → 目標スロット描画
     runAutoRollover();
     renderFreshBanner();
     renderGoalSlot();
     renderMirror();
+    renderReview();
     var c=cycleOf(viewAnchor);
     var todayCycle=cycleOf(new Date());
     var isCurrent=ymd(c.start)===ymd(todayCycle.start);
@@ -1433,6 +1529,16 @@
     var cb=$("freshClose"); if(cb) cb.addEventListener("click", function(){ slot.innerHTML=""; });
   }
 
+  // 目標へ手動でためる小関数。saved加算＋history積みだけ（save/toast/再描画は呼び出し側）。
+  // 「＋¥ためる」とふりかえりの両方で共用＝二重実装しない。
+  function addToGoal(amount, note){
+    var g=DB.goal; if(!g) return false;
+    var n=Math.round(Number(amount)||0); if(!(n>0)) return false;
+    g.saved+=n;
+    g.history.push({date:todayStr(), amount:n, note:String(note||"")});
+    return true;
+  }
+
   // --- ホームの目標スロット（最上段）：目標カード or 勧誘カード ---
   function renderGoalSlot(){
     var slot=$("goalSlot"); if(!slot) return;
@@ -1644,8 +1750,7 @@
       if(v==null) return;
       var n=Number(v);
       if(!isFinite(n)||n<=0){ toast("数字を入れてください"); return; }
-      g.saved+=Math.round(n);
-      g.history.push({date:todayStr(), amount:Math.round(n), note:"手動でためた"});
+      addToGoal(n, "手動でためた");
       save(); renderGoalSetting(); toast("ためました ✓");
     });
     $("gsSwitch").addEventListener("click", function(){
