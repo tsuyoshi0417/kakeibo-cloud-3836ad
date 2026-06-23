@@ -1020,9 +1020,9 @@
   var UNIT_LABEL={g:"g",ml:"ml",kosu:"個"};
   function unitPer(unit){ return unit==="kosu"?1:100; }
   function unitPerLabel(unit){ return unit==="kosu"?"1個あたり":(unit==="ml"?"100mlあたり":"100gあたり"); }
-  // 社員社割（サニー食品のみ・酒/非サニーは対象外＝定価）。8%は仮定＝「推定・目安」と明示し断定しない。
+  // 登録者割引（サニー食品のみ・酒/非サニーは対象外＝定価）。8%は仮定＝「推定・目安」と明示し断定しない。
   var MEMBER_DISCOUNT=0.08;
-  // フラグ付き品の「一般客の推定店頭価格」＝社員価格 ÷ 0.92（社割を戻した目安）。
+  // フラグ付き品の「一般客の推定店頭価格」＝割引価格 ÷ 0.92（割引を戻した目安）。
   function publicPrice(p){ return (p.memberPrice ? p.price/(1-MEMBER_DISCOUNT) : p.price); }
   // 比較・最安・損得は一般推定で公平に行う。フラグ無しは price をそのまま使う。
   function renderCompare(){
@@ -1060,17 +1060,17 @@
         sorted.forEach(function(it){
           var isBest=!it.qtyUnknown&&it.unitPrice===best&&isFinite(best);
           var qtyCell=it.qtyUnknown?'<span class="warn-flag">内容量?</span>':escapeHtml(String(it.qty))+UNIT_LABEL[it.unit];
-          // 価格セル：社割品は「社員¥X／一般推定¥Y」、通常品は ¥price
+          // 価格セル：割引品は「あなた¥X／一般推定¥Y」、通常品は ¥price
           var priceCell;
           if(it.memberPrice){
-            priceCell='<span class="muted small">社員</span>'+yen(it.price)+'<br><span class="muted small">一般推定 '+yen(Math.round(it.cmpPrice))+'</span>';
+            priceCell='<span class="muted small">あなた</span>'+yen(it.price)+'<br><span class="muted small">一般推定 '+yen(Math.round(it.cmpPrice))+'</span>';
           }else{ priceCell=yen(it.price); }
           var unitCell=it.qtyUnknown?'<span class="warn-flag">⚠️'+perWord+'不明</span>':'<b>'+yen(it.unitPrice)+'</b>';
           html+='<tr><td>'+escapeHtml(it.store||"―")+'</td><td>'+priceCell+' / '+qtyCell+'</td><td>'+unitCell+'</td>'+
                 '<td>'+(isBest?'<span class="best">最安</span>':'')+' <button class="del" data-pid="'+it.id+'">×</button></td></tr>';
         });
         html+='</table>';
-        if(hasMember){ html+='<div class="warn-note">ℹ️ サニーの食品はつよしさんの<b>社員価格（社割8%引き後）</b>。他店と公平に比べるため、単価は<b>社割を戻した一般推定（÷0.92）の目安</b>で並べています。8%は仮定のため「最安」と断定はできません。酒・タバコは社割対象外＝定価です。</div>'; }
+        if(hasMember){ html+='<div class="warn-note">ℹ️ サニーの食品は<b>登録者の割引価格</b>（一般店頭はこれより高め）。他店と公平に比べるため、単価は<b>割引を戻した一般推定（÷0.92）の目安</b>で並べています。8%は仮定のため「最安」と断定はできません。酒・タバコは割引対象外＝定価です。</div>'; }
         if(hasUnknown){ html+='<div class="warn-note">⚠️ 内容量(量)が未入力の品は単価を比較できません。レシートの内容量を入れると単価が出ます。</div>'; }
         html+='</div>';
       });
@@ -1159,7 +1159,7 @@
       msg+='<br><span class="small muted">※ 内容量不明のため比較から外した店：'+escapeHtml(skipped.map(function(p){return p.store||"―";}).join("・"))+'</span>';
     }
     if(anyMember){
-      msg+='<br><span class="small muted">※ サニー食品は社員価格を<b>社割8%戻した一般推定（÷0.92）</b>で計算した目安です（8%は仮定）。</span>';
+      msg+='<br><span class="small muted">※ サニー食品は割引価格を<b>8%戻した一般推定（÷0.92）</b>で計算した目安です（8%は仮定）。</span>';
     }
     $("vResult").innerHTML=html+'<div class="verdict win">'+msg+'</div>';
   });
@@ -1831,7 +1831,7 @@
           fbUser=null; rejecting=false;
           gate("gateSignin");
           show($("signinErr"));
-          $("signinErr").innerHTML="このアカウントは許可されていません。<br>つよしさんに連絡してね。";
+          $("signinErr").innerHTML="このアカウントは許可されていません。<br>管理者に連絡してね。";
           $("signinBtn").textContent="別のアカウントでサインイン";
         });
         return;
