@@ -613,6 +613,8 @@
         else{ var q=Number(p.qty); p.qty=(isFinite(q)&&q>0)?q:null; }
         // date は後方互換：YYYY-MM-DD以外（未定義含む）は空のまま許容（subId/§8と同じ）
         p.date = (typeof p.date==="string" && /^\d{4}-\d{2}-\d{2}$/.test(p.date)) ? p.date : "";
+        // memberPrice は後方互換：true のみ採用。未定義/その他は通常価格扱い（無印）
+        p.memberPrice = (p.memberPrice===true);
       });
       // --- 目標エンジン：欠損は既定で吸収（SCHEMA_VERSION据え置き） ---
       d.goal = normalizeGoal(d.goal);
@@ -1018,6 +1020,11 @@
   var UNIT_LABEL={g:"g",ml:"ml",kosu:"個"};
   function unitPer(unit){ return unit==="kosu"?1:100; }
   function unitPerLabel(unit){ return unit==="kosu"?"1個あたり":(unit==="ml"?"100mlあたり":"100gあたり"); }
+  // 社員社割（サニー食品のみ・酒/非サニーは対象外＝定価）。8%は仮定＝「推定・目安」と明示し断定しない。
+  var MEMBER_DISCOUNT=0.08;
+  // フラグ付き品の「一般客の推定店頭価格」＝社員価格 ÷ 0.92（社割を戻した目安）。
+  function publicPrice(p){ return (p.memberPrice ? p.price/(1-MEMBER_DISCOUNT) : p.price); }
+  // 比較・最安・損得は一般推定で公平に行う。フラグ無しは price をそのまま使う。
   function renderCompare(){
     refreshStoreDatalists();
     var groups={};
@@ -1037,24 +1044,33 @@
           var per=unitPer(it.unit);
           var hasQty=(it.qty!=null)&&Number(it.qty)>0;
           it.qtyUnknown=!hasQty;
-          it.unitPrice=hasQty?(it.price/it.qty*per):Infinity;
+          // 比較価格＝一般推定（社割品は price÷0.92）。他店と公平に並べる。
+          it.cmpPrice=publicPrice(it);
+          it.unitPrice=hasQty?(it.cmpPrice/it.qty*per):Infinity;        // 一般推定の単価（最安判定・並べ替えに使う）
         });
         var known=g.items.filter(function(it){ return !it.qtyUnknown; });
         var sorted=g.items.slice().sort(function(a,b){return a.unitPrice-b.unitPrice;});
         var best=known.length?Math.min.apply(null,known.map(function(it){return it.unitPrice;})):Infinity;
         var hasUnknown=g.items.some(function(it){return it.qtyUnknown;});
+        var hasMember=g.items.some(function(it){return it.memberPrice;});
         var perWord=g.unit==="kosu"?"1個あたり":(g.unit==="ml"?"100mlあたり":"100gあたり");
         html+='<div style="margin-bottom:16px;">';
         html+='<div style="font-weight:700;margin-bottom:6px;">'+escapeHtml(g.name)+' <span class="muted small">（'+unitPerLabel(g.unit)+'）</span></div>';
-        html+='<table><tr><th>店</th><th>価格/量</th><th>単価</th><th></th></tr>';
+        html+='<table><tr><th>店</th><th>価格/量</th><th>単価'+(hasMember?'<span class="muted small">（一般推定）</span>':'')+'</th><th></th></tr>';
         sorted.forEach(function(it){
           var isBest=!it.qtyUnknown&&it.unitPrice===best&&isFinite(best);
           var qtyCell=it.qtyUnknown?'<span class="warn-flag">内容量?</span>':escapeHtml(String(it.qty))+UNIT_LABEL[it.unit];
+          // 価格セル：社割品は「社員¥X／一般推定¥Y」、通常品は ¥price
+          var priceCell;
+          if(it.memberPrice){
+            priceCell='<span class="muted small">社員</span>'+yen(it.price)+'<br><span class="muted small">一般推定 '+yen(Math.round(it.cmpPrice))+'</span>';
+          }else{ priceCell=yen(it.price); }
           var unitCell=it.qtyUnknown?'<span class="warn-flag">⚠️'+perWord+'不明</span>':'<b>'+yen(it.unitPrice)+'</b>';
-          html+='<tr><td>'+escapeHtml(it.store||"―")+'</td><td>'+yen(it.price)+' / '+qtyCell+'</td><td>'+unitCell+'</td>'+
+          html+='<tr><td>'+escapeHtml(it.store||"―")+'</td><td>'+priceCell+' / '+qtyCell+'</td><td>'+unitCell+'</td>'+
                 '<td>'+(isBest?'<span class="best">最安</span>':'')+' <button class="del" data-pid="'+it.id+'">×</button></td></tr>';
         });
         html+='</table>';
+        if(hasMember){ html+='<div class="warn-note">ℹ️ サニーの食品はつよしさんの<b>社員価格（社割8%引き後）</b>。他店と公平に比べるため、単価は<b>社割を戻した一般推定（÷0.92）の目安</b>で並べています。8%は仮定のため「最安」と断定はできません。酒・タバコは社割対象外＝定価です。</div>'; }
         if(hasUnknown){ html+='<div class="warn-note">⚠️ 内容量(量)が未入力の品は単価を比較できません。レシートの内容量を入れると単価が出ます。</div>'; }
         html+='</div>';
       });
@@ -1110,10 +1126,12 @@
       $("vResult").innerHTML='<div class="verdict" style="background:#fbf3e0;color:var(--gold);border:1px solid #ecd9a6;">⚠️ この商品は内容量が入った価格が無いため、総額で比較できません。<br><span class="small">価格比較で内容量を入れてください。</span></div>';
       return;
     }
+    var anyMember=items.some(function(it){return it.memberPrice;});
     var rows=items.map(function(it){
-      var goodsCost=it.price/it.qty*qty;
+      // 損得も一般推定（社割品は price÷0.92）で公平に。
+      var goodsCost=publicPrice(it)/it.qty*qty;
       var st=storeInfo(it.store);
-      return {store:it.store||"―", km:st.km, fare:st.fare, goods:goodsCost, total:goodsCost+st.fare};
+      return {store:it.store||"―", km:st.km, fare:st.fare, goods:goodsCost, total:goodsCost+st.fare, memberPrice:it.memberPrice};
     });
     rows.sort(function(a,b){ return a.total-b.total; });
     var win=rows[0];
@@ -1139,6 +1157,9 @@
     }else{ msg='登録は1店だけ：<b>'+escapeHtml(win.store)+'</b>（総額 '+yen(win.total)+'）'; }
     if(skipped.length){
       msg+='<br><span class="small muted">※ 内容量不明のため比較から外した店：'+escapeHtml(skipped.map(function(p){return p.store||"―";}).join("・"))+'</span>';
+    }
+    if(anyMember){
+      msg+='<br><span class="small muted">※ サニー食品は社員価格を<b>社割8%戻した一般推定（÷0.92）</b>で計算した目安です（8%は仮定）。</span>';
     }
     $("vResult").innerHTML=html+'<div class="verdict win">'+msg+'</div>';
   });
