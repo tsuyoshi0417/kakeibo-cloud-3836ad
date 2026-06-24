@@ -319,6 +319,10 @@
     </div>
     <div class="card">
       <h3 class="sec-title">商品ごとの単価くらべ</h3>
+      <input id="cmpSearch" placeholder="商品名でさがす" autocomplete="off">
+      <label style="margin-top:10px;">今いる店</label>
+      <select id="cmpStore"></select>
+      <div style="height:10px;"></div>
       <div id="cmpList"><div class="empty">まだ登録がありません</div></div>
     </div>
     <div class="card">
@@ -690,6 +694,8 @@
         p.saleLimited = (p.saleLimited===true);
         // note は後方互換：文字列のみ保持（特売条件など）。
         p.note = (typeof p.note==="string") ? p.note : "";
+        // groupId は後方互換：名寄せ用の任意キー。文字列のみ採用、無ければ空（＝従来どおり name 単位でグループ化）。
+        p.groupId = (typeof p.groupId==="string") ? p.groupId : "";
       });
       // --- 目標エンジン：欠損は既定で吸収（SCHEMA_VERSION据え置き） ---
       d.goal = normalizeGoal(d.goal);
@@ -1182,17 +1188,71 @@
   // フラグ付き品の「一般客の推定店頭価格」＝割引価格 ÷ 0.92（割引を戻した目安）。
   function publicPrice(p){ return (p.memberPrice ? p.price/(1-MEMBER_DISCOUNT) : p.price); }
   // 比較・最安・損得は一般推定で公平に行う。フラグ無しは price をそのまま使う。
+
+  // 検索の正規化：ひらがな→カタカナ、半角カナ→全角カナ、英字小文字化、空白除去。
+  function normKana(s){
+    s=String(s==null?"":s);
+    // 半角カナ→全角カナ（NFKC）。Unicode正規化が無い環境でも最低限動くようtry。
+    try{ s=s.normalize("NFKC"); }catch(e){}
+    // ひらがな→カタカナ（U+3041〜U+3096 を +0x60）。
+    s=s.replace(/[ぁ-ゖ]/g,function(c){ return String.fromCharCode(c.charCodeAt(0)+0x60); });
+    return s.toLowerCase().replace(/\s+/g,"");
+  }
+  function cmpDateLabel(d){ // "2026-06-15" → "6月15日"
+    var m=/^\d{4}-(\d{2})-(\d{2})$/.exec(d||""); if(!m) return "";
+    return Number(m[1])+"月"+Number(m[2])+"日";
+  }
+  // 検索語・選んだ店は localStorage に保持。
+  var CMP_SEARCH_KEY="kakeibo_cmp_search_v1", CMP_STORE_KEY="kakeibo_cmp_store_v1";
+  function getCmpStore(){ try{ return localStorage.getItem(CMP_STORE_KEY)||""; }catch(e){ return ""; } }
+  function setCmpStore(v){ try{ localStorage.setItem(CMP_STORE_KEY, v); }catch(e){} }
+  function onCmpSearch(){ try{ localStorage.setItem(CMP_SEARCH_KEY, $("cmpSearch").value||""); }catch(e){} renderCompare(); }
+  function onCmpStore(){ setCmpStore($("cmpStore").value||""); renderCompare(); }
+  // 「今いる店」セレクタの選択肢を組み立て（指定なし＋各店）。
+  function buildCmpStoreSelect(){
+    var sel=$("cmpStore"); if(!sel) return;
+    var cur=getCmpStore();
+    var html='<option value="">指定なし（全部）</option>';
+    (DB.stores||[]).forEach(function(s){ html+='<option value="'+escapeHtml(s.name)+'">'+escapeHtml(s.name)+'</option>'; });
+    sel.innerHTML=html;
+    // 保存値が今の店一覧に無ければ「指定なし」に戻す（店が消えた場合）。
+    var exists=(DB.stores||[]).some(function(s){return s.name===cur;});
+    sel.value=exists?cur:"";
+    if(!exists && cur) setCmpStore("");
+  }
+
   function renderCompare(){
     refreshStoreDatalists();
+    buildCmpStoreSelect();
+    // 検索ボックスの値を復元（再描画で消えないように）。
+    if($("cmpSearch")){ var sv=""; try{ sv=localStorage.getItem(CMP_SEARCH_KEY)||""; }catch(e){} if($("cmpSearch").value!==sv) $("cmpSearch").value=sv; }
+    var q="";  try{ q=normKana(localStorage.getItem(CMP_SEARCH_KEY)||""); }catch(e){}
+    var hereStore=getCmpStore();
+    var hasAnyPrice=(DB.prices||[]).length>0;
     var groups={};
     DB.prices.forEach(function(p){
-      var key=p.name+"|"+p.unit;
-      if(!groups[key]) groups[key]={name:p.name,unit:p.unit,items:[]};
-      groups[key].items.push(p);
+      // 名寄せ：groupId があればそれ、無ければ name でグループ化（unit は従来どおりキーに含める）。
+      var gkey=(p.groupId||p.name)+"|"+p.unit;
+      if(!groups[gkey]) groups[gkey]={name:p.name,unit:p.unit,items:[]};
+      groups[gkey].items.push(p);
     });
-    var keys=Object.keys(groups);
+    var allKeys=Object.keys(groups);
+    // 検索フィルタ（部分一致・カナ正規化）。グループ内のどれかの商品名がヒットすれば残す。
+    var keys=allKeys.filter(function(k){
+      if(!q) return true;
+      return groups[k].items.some(function(it){ return normKana(it.name).indexOf(q)>=0; });
+    });
+    // 今いる店モード：その店で記録のあるグループを先頭へ寄せる（安定ソート）。
+    if(hereStore){
+      keys.sort(function(a,b){
+        var ah=groups[a].items.some(function(it){return it.store===hereStore;})?0:1;
+        var bh=groups[b].items.some(function(it){return it.store===hereStore;})?0:1;
+        return ah-bh;
+      });
+    }
     var box=$("cmpList");
-    if(!keys.length){ box.innerHTML='<div class="empty">まだ登録がありません</div>'; }
+    if(!hasAnyPrice){ box.innerHTML='<div class="empty">まだ登録がありません</div>'; }
+    else if(!keys.length){ box.innerHTML='<div class="empty">まだ記録がありません</div>'; }
     else{
       var html="";
       keys.forEach(function(k){
@@ -1220,16 +1280,24 @@
         sorted.forEach(function(it){
           // 特売（saleLimited）は最安判定の対象外＝"いつもの最安"として印を付けない。
           var isBest=!it.qtyUnknown&&!it.saleLimited&&it.unitPrice===best&&isFinite(best);
-          var qtyCell=it.qtyUnknown?'<span class="warn-flag">内容量?</span>':escapeHtml(String(it.qty))+UNIT_LABEL[it.unit];
+          // 今いる店モード：その店の行を太字でハイライト（新色なし＝太字のみ）。
+          var hereHi=(hereStore && it.store===hereStore);
+          var qtyCell=it.qtyUnknown?'<span class="warn-flag">内容量待ち</span>':escapeHtml(String(it.qty))+UNIT_LABEL[it.unit];
           // 価格セル：割引品は「あなた¥X／一般推定¥Y」、通常品は ¥price
           var priceCell;
           if(it.memberPrice){
             priceCell='<span class="muted small">あなた</span>'+yen(it.price)+'<br><span class="muted small">一般推定 '+yen(Math.round(it.cmpPrice))+'</span>';
           }else{ priceCell=yen(it.price); }
-          var unitCell=it.qtyUnknown?'<span class="warn-flag">⚠️'+perWord+'不明</span>':'<b>'+yen(it.unitPrice)+'</b>';
+          // 単価セル：qtyUnknown は単価を出せないが「記録あり」を事実として見せる（記録なし扱いにしない）。
+          var unitCell;
+          if(it.qtyUnknown){
+            var dl=cmpDateLabel(it.date);
+            unitCell='<span class="warn-flag">⚠️'+perWord+'待ち</span>'+(dl?'<br><span class="muted small">'+dl+'</span>':'');
+          }else{ unitCell='<b>'+yen(it.unitPrice)+'</b>'; }
           // 特売は店名の隣に中立ラベル（既存 warn-flag スタイルを流用＝新色なし）。
           var saleTag=it.saleLimited?' <span class="warn-flag">特売（お一人様1点）</span>':'';
-          html+='<tr><td>'+escapeHtml(it.store||"―")+saleTag+'</td><td>'+priceCell+' / '+qtyCell+'</td><td>'+unitCell+'</td>'+
+          var storeCell=hereHi?'<b>'+escapeHtml(it.store||"―")+'</b>':escapeHtml(it.store||"―");
+          html+='<tr'+(hereHi?' style="background:var(--line);"':'')+'><td>'+storeCell+saleTag+'</td><td>'+priceCell+' / '+qtyCell+'</td><td>'+unitCell+'</td>'+
                 '<td>'+(isBest?'<span class="best">最安</span>':'')+' <button class="del" data-pid="'+it.id+'">×</button></td></tr>';
         });
         html+='</table>';
@@ -1260,6 +1328,8 @@
     $("vQtyUnit").innerHTML="<option>"+(unit?UNIT_LABEL[unit]:"―")+"</option>";
   }
   $("vProd")&&$("vProd").addEventListener("change", updateVUnit);
+  $("cmpSearch")&&$("cmpSearch").addEventListener("input", onCmpSearch);
+  $("cmpStore")&&$("cmpStore").addEventListener("change", onCmpStore);
   $("pAddBtn").addEventListener("click", function(){
     var name=$("pName").value.trim();
     var store=$("pStore").value.trim();
@@ -1282,8 +1352,9 @@
     if(!k){ toast("商品がありません。先に価格を登録してください"); return; }
     var qty=Number($("vQty").value);
     if(!qty||qty<=0){ toast("買う量を入れてください"); return; }
-    var parts=k.split("|"); var name=parts[0]; var unit=parts[1];
-    var all=DB.prices.filter(function(p){ return p.name===name && p.unit===unit; });
+    var parts=k.split("|"); var gkeyHead=parts[0]; var unit=parts[1];
+    // グループキー＝(groupId||name)。価格比較の束ね方と同じルールで、選んだグループの品を集める。
+    var all=DB.prices.filter(function(p){ return (p.groupId||p.name)===gkeyHead && p.unit===unit; });
     // 特売（お一人様1点）は通常相場でない＝総額比較から外す（紛れさせない）。
     var saleItems=all.filter(function(p){ return p.saleLimited; });
     var nonSale=all.filter(function(p){ return !p.saleLimited; });
