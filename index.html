@@ -42,6 +42,18 @@
   .chips{display:flex;flex-wrap:wrap;gap:8px;}
   .chip{padding:10px 14px;border-radius:999px;border:1.5px solid var(--line);background:#fff;font-size:15px;font-weight:600;cursor:pointer;color:var(--ink-sub);}
   .chip.on{background:var(--teal);color:#fff;border-color:var(--teal);}
+  /* 割引タブ */
+  .dc-seg{display:flex;gap:8px;margin:6px 0 4px;}
+  .dc-segbtn{flex:1;min-height:48px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink-sub);font-size:16px;font-weight:700;cursor:pointer;}
+  .dc-segbtn.on{background:var(--teal);color:#fff;border-color:var(--teal);}
+  input.dc-base{font-size:22px;font-weight:700;}
+  .dc-chips{display:flex;gap:8px;}
+  .dc-chip{flex:1;min-height:48px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink-sub);font-size:16px;font-weight:600;cursor:pointer;padding:0 4px;}
+  .dc-chip.on{background:var(--teal);color:#fff;border-color:var(--teal);}
+  .dc-result{margin-top:18px;text-align:center;}
+  .dc-hint{font-size:15px;color:var(--ink-sub);padding:14px 0;}
+  .dc-price{font-size:48px;font-weight:700;line-height:1.0;color:var(--ink);}
+  .dc-trace{font-size:14px;color:var(--ink-sub);margin-top:8px;}
   .big-remain{font-size:46px;font-weight:800;line-height:1.1;letter-spacing:-1px;}
   .big-remain.neg{color:var(--danger);}
   .big-remain .yen{font-size:24px;font-weight:700;margin-right:2px;}
@@ -325,6 +337,48 @@
     </div>
   </section>
 
+  <!-- 割引（純粋な電卓・データに一切触れない） -->
+  <section id="discount" class="page">
+    <div class="card">
+      <h2 style="margin-bottom:4px;">割引の計算</h2>
+      <p class="help">札の値段から、割引後の値段をその場で計算します。打った数字はどこにも保存されません。</p>
+
+      <div class="dc-seg" id="dcSeg">
+        <button type="button" class="dc-segbtn on" data-mode="pct">％引き</button>
+        <button type="button" class="dc-segbtn" data-mode="yen">円引き</button>
+      </div>
+
+      <label>元の値段（円）</label>
+      <input type="number" id="dcBase" inputmode="numeric" placeholder="1280" min="0" class="dc-base">
+
+      <div id="dcPctWrap">
+        <label>割引</label>
+        <div class="dc-chips" id="dcChips">
+          <button type="button" class="dc-chip" data-pct="50">半額</button>
+          <button type="button" class="dc-chip" data-pct="30">30%</button>
+          <button type="button" class="dc-chip" data-pct="20">20%</button>
+          <button type="button" class="dc-chip" data-pct="10">10%</button>
+          <button type="button" class="dc-chip" data-pct="other">他</button>
+        </div>
+        <div id="dcOtherWrap" class="hidden">
+          <label>割引率（％）</label>
+          <input type="number" id="dcOtherPct" inputmode="numeric" placeholder="25" min="0" max="100">
+        </div>
+      </div>
+
+      <div id="dcYenWrap" class="hidden">
+        <label>引く額（円）</label>
+        <input type="number" id="dcYenAmt" inputmode="numeric" placeholder="100" min="0">
+      </div>
+
+      <div class="dc-result" id="dcResult">
+        <div class="dc-hint" id="dcHint">数字を入れてね</div>
+        <div class="dc-price hidden" id="dcPrice"></div>
+        <div class="dc-trace" id="dcTrace"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- 設定 -->
   <section id="settings" class="page">
     <div class="card">
@@ -399,6 +453,7 @@
   <button data-tab="home" class="on"><span class="ti">🏠</span>ホーム</button>
   <button data-tab="add"><span class="ti">✏️</span>入力</button>
   <button data-tab="compare"><span class="ti">⚖️</span>価格比較</button>
+  <button data-tab="discount"><span class="ti">🧮</span>割引</button>
   <button data-tab="settings"><span class="ti">⚙️</span>設定</button>
 </nav>
 <div class="toast" id="toast"></div>
@@ -631,6 +686,10 @@
         p.date = (typeof p.date==="string" && /^\d{4}-\d{2}-\d{2}$/.test(p.date)) ? p.date : "";
         // memberPrice は後方互換：true のみ採用。未定義/その他は通常価格扱い（無印）
         p.memberPrice = (p.memberPrice===true);
+        // saleLimited は後方互換：true のみ採用。特売（お一人様1点）＝通常相場と混同しない印。
+        p.saleLimited = (p.saleLimited===true);
+        // note は後方互換：文字列のみ保持（特売条件など）。
+        p.note = (typeof p.note==="string") ? p.note : "";
       });
       // --- 目標エンジン：欠損は既定で吸収（SCHEMA_VERSION据え置き） ---
       d.goal = normalizeGoal(d.goal);
@@ -769,6 +828,7 @@
       if(tab==="settings") renderSettings();
       if(tab==="add") renderAdd();
       if(tab==="home") renderHome();
+      if(tab==="discount") renderDiscount();
     });
   }
 
@@ -786,8 +846,9 @@
   }
   function renderMirror(){
     var slot=$("priceMirror"); if(!slot) return;
-    // date を持つ価格だけ（後方互換：無印は対象外）
-    var dated=(DB.prices||[]).filter(function(p){ return p.date && /^\d{4}-\d{2}-\d{2}$/.test(p.date); });
+    // date を持つ価格だけ（後方互換：無印は対象外）。
+    // 特売（お一人様1点・saleLimited）は通常相場でない＝鏡の「いつもの値段」比較から外す（底値判定を歪めない）。
+    var dated=(DB.prices||[]).filter(function(p){ return p.date && /^\d{4}-\d{2}-\d{2}$/.test(p.date) && !p.saleLimited; });
     if(!dated.length){ slot.innerHTML=""; return; } // 事実が無い日は枠ごと消す
     // 直近に記録した買い物（date降順、同日内はid降順）。先頭1〜2件を鏡に出す。
     var recent=dated.slice().sort(function(a,b){ return (b.date+(b.id||"")).localeCompare(a.date+(a.id||"")); });
@@ -1144,17 +1205,21 @@
           it.cmpPrice=publicPrice(it);
           it.unitPrice=hasQty?(it.cmpPrice/it.qty*per):Infinity;        // 一般推定の単価（最安判定・並べ替えに使う）
         });
-        var known=g.items.filter(function(it){ return !it.qtyUnknown; });
+        // 最安判定の母集団＝内容量が分かり、かつ特売（お一人様1点）でない品だけ。
+        // 特売は通常相場でない＝"いつもの最安"として扱わない（底値を歪めない）。
+        var known=g.items.filter(function(it){ return !it.qtyUnknown && !it.saleLimited; });
         var sorted=g.items.slice().sort(function(a,b){return a.unitPrice-b.unitPrice;});
         var best=known.length?Math.min.apply(null,known.map(function(it){return it.unitPrice;})):Infinity;
         var hasUnknown=g.items.some(function(it){return it.qtyUnknown;});
         var hasMember=g.items.some(function(it){return it.memberPrice;});
+        var hasSale=g.items.some(function(it){return it.saleLimited;});
         var perWord=g.unit==="kosu"?"1個あたり":(g.unit==="ml"?"100mlあたり":"100gあたり");
         html+='<div style="margin-bottom:16px;">';
         html+='<div style="font-weight:700;margin-bottom:6px;">'+escapeHtml(g.name)+' <span class="muted small">（'+unitPerLabel(g.unit)+'）</span></div>';
         html+='<table><tr><th>店</th><th>価格/量</th><th>単価'+(hasMember?'<span class="muted small">（一般推定）</span>':'')+'</th><th></th></tr>';
         sorted.forEach(function(it){
-          var isBest=!it.qtyUnknown&&it.unitPrice===best&&isFinite(best);
+          // 特売（saleLimited）は最安判定の対象外＝"いつもの最安"として印を付けない。
+          var isBest=!it.qtyUnknown&&!it.saleLimited&&it.unitPrice===best&&isFinite(best);
           var qtyCell=it.qtyUnknown?'<span class="warn-flag">内容量?</span>':escapeHtml(String(it.qty))+UNIT_LABEL[it.unit];
           // 価格セル：割引品は「あなた¥X／一般推定¥Y」、通常品は ¥price
           var priceCell;
@@ -1162,11 +1227,14 @@
             priceCell='<span class="muted small">あなた</span>'+yen(it.price)+'<br><span class="muted small">一般推定 '+yen(Math.round(it.cmpPrice))+'</span>';
           }else{ priceCell=yen(it.price); }
           var unitCell=it.qtyUnknown?'<span class="warn-flag">⚠️'+perWord+'不明</span>':'<b>'+yen(it.unitPrice)+'</b>';
-          html+='<tr><td>'+escapeHtml(it.store||"―")+'</td><td>'+priceCell+' / '+qtyCell+'</td><td>'+unitCell+'</td>'+
+          // 特売は店名の隣に中立ラベル（既存 warn-flag スタイルを流用＝新色なし）。
+          var saleTag=it.saleLimited?' <span class="warn-flag">特売（お一人様1点）</span>':'';
+          html+='<tr><td>'+escapeHtml(it.store||"―")+saleTag+'</td><td>'+priceCell+' / '+qtyCell+'</td><td>'+unitCell+'</td>'+
                 '<td>'+(isBest?'<span class="best">最安</span>':'')+' <button class="del" data-pid="'+it.id+'">×</button></td></tr>';
         });
         html+='</table>';
         if(hasMember){ html+='<div class="warn-note">ℹ️ サニーの食品は<b>登録者の割引価格</b>（一般店頭はこれより高め）。他店と公平に比べるため、単価は<b>割引を戻した一般推定（÷0.92）の目安</b>で並べています。8%は仮定のため「最安」と断定はできません。酒・タバコは割引対象外＝定価です。</div>'; }
+        if(hasSale){ html+='<div class="warn-note">ℹ️「特売（お一人様1点）」は記録した日（限定数の特売）の値段です。<b>いつもの値段とは別もの</b>なので、最安には数えていません。</div>'; }
         if(hasUnknown){ html+='<div class="warn-note">⚠️ 内容量(量)が未入力の品は単価を比較できません。レシートの内容量を入れると単価が出ます。</div>'; }
         html+='</div>';
       });
@@ -1216,8 +1284,11 @@
     if(!qty||qty<=0){ toast("買う量を入れてください"); return; }
     var parts=k.split("|"); var name=parts[0]; var unit=parts[1];
     var all=DB.prices.filter(function(p){ return p.name===name && p.unit===unit; });
-    var items=all.filter(function(p){ return p.qty!=null && Number(p.qty)>0; });
-    var skipped=all.filter(function(p){ return p.qty==null || !(Number(p.qty)>0); });
+    // 特売（お一人様1点）は通常相場でない＝総額比較から外す（紛れさせない）。
+    var saleItems=all.filter(function(p){ return p.saleLimited; });
+    var nonSale=all.filter(function(p){ return !p.saleLimited; });
+    var items=nonSale.filter(function(p){ return p.qty!=null && Number(p.qty)>0; });
+    var skipped=nonSale.filter(function(p){ return p.qty==null || !(Number(p.qty)>0); });
     if(!items.length){
       $("vResult").innerHTML='<div class="verdict" style="background:#fbf3e0;color:var(--gold);border:1px solid #ecd9a6;">⚠️ この商品は内容量が入った価格が無いため、総額で比較できません。<br><span class="small">価格比較で内容量を入れてください。</span></div>';
       return;
@@ -1253,6 +1324,9 @@
     }else{ msg='登録は1店だけ：<b>'+escapeHtml(win.store)+'</b>（総額 '+yen(win.total)+'）'; }
     if(skipped.length){
       msg+='<br><span class="small muted">※ 内容量不明のため比較から外した店：'+escapeHtml(skipped.map(function(p){return p.store||"―";}).join("・"))+'</span>';
+    }
+    if(saleItems.length){
+      msg+='<br><span class="small muted">※ 特売（お一人様1点）は通常の値段でないため比較から外しました：'+escapeHtml(saleItems.map(function(p){return p.store||"―";}).join("・"))+'</span>';
     }
     if(anyMember){
       msg+='<br><span class="small muted">※ サニー食品は割引価格を<b>8%戻した一般推定（÷0.92）</b>で計算した目安です（8%は仮定）。</span>';
@@ -1781,6 +1855,103 @@
     save();
     openGoalWizard();
   }
+
+  // ============================================================
+  //  割引タブ（純粋な電卓・DB に一切触れない・保存/同期/暗号なし）
+  //  禁止線：お得額を出さない／評価語・煽りなし／元値を強調しない／
+  //          引き後を緑にしない（中立 --ink）。
+  // ============================================================
+  var dcMode="pct";   // "pct" | "yen"
+  var dcPct=null;     // 選択中の率（number）または "other"
+  function dcReset(){
+    dcMode="pct"; dcPct=null;
+    $("dcBase").value=""; $("dcOtherPct").value=""; $("dcYenAmt").value="";
+    var seg=$("dcSeg").querySelectorAll(".dc-segbtn");
+    for(var i=0;i<seg.length;i++) seg[i].classList.toggle("on", seg[i].getAttribute("data-mode")==="pct");
+    var chips=$("dcChips").querySelectorAll(".dc-chip");
+    for(var c=0;c<chips.length;c++) chips[c].classList.remove("on");
+    $("dcPctWrap").classList.remove("hidden");
+    $("dcYenWrap").classList.add("hidden");
+    $("dcOtherWrap").classList.add("hidden");
+    dcCompute();
+  }
+  function renderDiscount(){ /* 状態は保持（前回の入力は残す）・再計算だけ */ dcCompute(); }
+  function dcNum(id){
+    var v=parseFloat($(id).value);
+    return isFinite(v)?v:null;
+  }
+  function dcCompute(){
+    var hintEl=$("dcHint"), priceEl=$("dcPrice"), traceEl=$("dcTrace");
+    var base=dcNum("dcBase");
+    // 元値が空 or 0 はガード（煽らない）
+    if(base==null || base<=0){
+      hintEl.classList.remove("hidden");
+      priceEl.classList.add("hidden");
+      priceEl.textContent="";
+      traceEl.textContent="";
+      return;
+    }
+    var after=null, trace="";
+    if(dcMode==="pct"){
+      var rate=null;
+      if(dcPct==="other") rate=dcNum("dcOtherPct");
+      else if(dcPct!=null) rate=Number(dcPct);
+      if(rate==null || !isFinite(rate)){
+        // 率が未選択／未入力＝結果を出さない
+        hintEl.classList.remove("hidden");
+        priceEl.classList.add("hidden");
+        priceEl.textContent="";
+        traceEl.textContent="";
+        return;
+      }
+      after=Math.round(base*(1-rate/100));
+      trace="元 "+yen(base)+" → "+(rate%1===0?rate:rate)+"%引き";
+    } else {
+      var amt=dcNum("dcYenAmt");
+      if(amt==null){
+        hintEl.classList.remove("hidden");
+        priceEl.classList.add("hidden");
+        priceEl.textContent="";
+        traceEl.textContent="";
+        return;
+      }
+      after=Math.round(base-amt);
+      trace="元 "+yen(base)+" → "+yen(amt)+"引き";
+    }
+    if(after<0) after=0; // マイナスは ¥0
+    hintEl.classList.add("hidden");
+    priceEl.classList.remove("hidden");
+    priceEl.textContent=yen(after);
+    traceEl.textContent=trace;
+  }
+  // セグメント（％引き／円引き）
+  (function(){
+    var seg=$("dcSeg").querySelectorAll(".dc-segbtn");
+    for(var i=0;i<seg.length;i++){
+      seg[i].addEventListener("click", function(){
+        dcMode=this.getAttribute("data-mode");
+        for(var k=0;k<seg.length;k++) seg[k].classList.toggle("on", seg[k]===this);
+        if(dcMode==="pct"){ $("dcPctWrap").classList.remove("hidden"); $("dcYenWrap").classList.add("hidden"); }
+        else { $("dcPctWrap").classList.add("hidden"); $("dcYenWrap").classList.remove("hidden"); }
+        dcCompute();
+      });
+    }
+    // 割引チップ
+    var chips=$("dcChips").querySelectorAll(".dc-chip");
+    for(var c=0;c<chips.length;c++){
+      chips[c].addEventListener("click", function(){
+        var v=this.getAttribute("data-pct");
+        dcPct=(v==="other")?"other":Number(v);
+        for(var k=0;k<chips.length;k++) chips[k].classList.toggle("on", chips[k]===this);
+        if(dcPct==="other"){ $("dcOtherWrap").classList.remove("hidden"); $("dcOtherPct").focus(); }
+        else { $("dcOtherWrap").classList.add("hidden"); }
+        dcCompute();
+      });
+    }
+    $("dcBase").addEventListener("input", dcCompute);
+    $("dcOtherPct").addEventListener("input", dcCompute);
+    $("dcYenAmt").addEventListener("input", dcCompute);
+  })();
 
   function renderAll(){ renderHome(); renderAdd(); }
 
