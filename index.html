@@ -54,15 +54,20 @@
   .dc-hint{font-size:15px;color:var(--ink-sub);padding:14px 0;}
   .dc-price{font-size:48px;font-weight:700;line-height:1.0;color:var(--ink);}
   .dc-trace{font-size:14px;color:var(--ink-sub);margin-top:8px;}
-  .big-remain{font-size:46px;font-weight:800;line-height:1.1;letter-spacing:-1px;}
-  .big-remain.neg{color:var(--danger);}
-  .big-remain .yen{font-size:24px;font-weight:700;margin-right:2px;}
-  .stat-row{display:flex;justify-content:space-around;margin-top:6px;padding-top:14px;border-top:1px solid var(--line);}
-  .stat{text-align:center;}
-  .stat .v{font-size:20px;font-weight:700;}
-  .stat .l{font-size:12px;color:var(--ink-sub);}
-  .pace-line{margin-top:12px;font-size:14px;color:var(--gold);font-weight:600;}
-  .pace-line .pn{font-size:17px;font-weight:700;}
+  .remain-total{font-size:20px;font-weight:700;color:var(--ink-sub);margin:2px 0 14px;}
+  .remain-total b{color:var(--ink);font-weight:800;}
+  .cat-remains{display:flex;flex-direction:column;gap:16px;}
+  .cr-row{text-align:left;}
+  .cr-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+  .cr-name{font-size:16px;font-weight:700;color:var(--ink);}
+  .cr-left{font-size:15px;color:var(--ink-sub);}
+  .cr-left b{font-size:26px;font-weight:800;color:var(--teal);letter-spacing:-.5px;}
+  .cr-row.warn .cr-left b{color:var(--warn);}
+  .cr-row.over .cr-left b{color:var(--ink-sub);font-size:22px;}
+  .cr-row.warn .bar-fill,.cr-row.over .bar-fill{background:var(--warn);}
+  .cr-sub{font-size:12px;color:var(--ink-sub);margin-top:5px;}
+  .cycle-foot{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--gold);font-weight:600;}
+  .cycle-foot .pn{font-size:16px;font-weight:700;}
   .bar-item{margin:12px 0;}
   .bar-head{display:flex;justify-content:space-between;font-size:14px;margin-bottom:5px;}
   .bar-track{height:12px;background:#efeadd;border-radius:8px;overflow:hidden;}
@@ -287,13 +292,9 @@
     <div id="goalSlot"></div>
     <div class="card center">
       <div class="muted small" id="remainLead">あといくら使える</div>
-      <div id="remain" class="big-remain"><span class="yen">¥</span>0</div>
-      <div class="stat-row">
-        <div class="stat"><div class="v" id="budgetV">¥0</div><div class="l">予算</div></div>
-        <div class="stat"><div class="v" id="spentV">¥0</div><div class="l">使った合計</div></div>
-        <div class="stat"><div class="v" id="daysV">―</div><div class="l">のこり日数</div></div>
-      </div>
-      <div class="pace-line" id="paceLine"></div>
+      <div id="remainTotal" class="remain-total"></div>
+      <div id="catRemains" class="cat-remains"></div>
+      <div class="cycle-foot" id="cycleFoot"></div>
     </div>
     <div id="priceMirror"></div>
     <div class="card">
@@ -1067,29 +1068,54 @@
     $("homeMonth").textContent=cycleLabel(c)+(isCurrent?"":"（過去）");
     var catBudgets=DB.catBudgets||{};
     var list=DB.expenses.filter(function(e){ return inCycle(e.date||"",c); });
-    var spent=list.reduce(function(s,e){ return s+Number(e.amount||0); },0);
     var catSpent={}; list.forEach(function(e){ catSpent[e.catId]=(catSpent[e.catId]||0)+Number(e.amount||0); });
     var remain=cycleRemain(catBudgets,catSpent);
-    var budgetTotal=cycleBudgetTotal(catBudgets);
     var hasBudget=Object.keys(catBudgets).length>0;
-    var rEl=$("remain");
+    var daysLeft=daysLeftIn(c,new Date());
+    var totalEl=$("remainTotal"), catRemEl=$("catRemains"), footEl=$("cycleFoot");
     if(!hasBudget){
+      // 予算未設定：合算¥0・費目別空・のこり日数だけ（ペースは出せない）
       $("remainLead").textContent="予算が未設定です";
-      rEl.innerHTML='<span class="yen">¥</span>0'; rEl.classList.remove("neg");
+      totalEl.innerHTML='合計 <b>¥0</b>';
+      catRemEl.innerHTML="";
+      footEl.innerHTML=isCurrent?('のこり <span class="pn">'+daysLeft+'日</span>'):"";
     }else{
       $("remainLead").textContent="あといくら使える";
-      rEl.innerHTML=(remain<0?'<span class="yen">−¥</span>':'<span class="yen">¥</span>')+Math.abs(remain).toLocaleString("ja-JP");
-      rEl.classList.toggle("neg",remain<0);
+      // 合算（従属）：マイナスは「−¥X こえています」表記
+      if(remain<0){ totalEl.innerHTML='合計 <b>−'+yen(Math.abs(remain))+'</b> こえています'; }
+      else{ totalEl.innerHTML='合計 <b>'+yen(remain)+'</b>'; }
+      // 費目別（主役）：DB.cats を回し catBudgets>0 の費目だけ生成（ハードコード禁止）
+      var crHtml="";
+      DB.cats.forEach(function(cc){
+        var budget=Number(catBudgets[cc.id]||0);
+        if(budget<=0) return; // 予算未設定の費目は出さない（§10）
+        var used=Number(catSpent[cc.id]||0);
+        var left=budget-used;
+        var pct=Math.max(0,Math.min(100,used/budget*100));
+        var cls=left<0?'over':(left<=budget*0.2?'warn':'');
+        var leftHtml=left<0
+          ? '−<b>'+yen(Math.abs(left))+'</b> こえています'
+          : 'あと <b>'+yen(left)+'</b>';
+        crHtml+='<div class="cr-row'+(cls?' '+cls:'')+'">'+
+          '<div class="cr-head"><span class="cr-name">'+escapeHtml(cc.icon)+' '+escapeHtml(cc.name)+'</span>'+
+          '<span class="cr-left">'+leftHtml+'</span></div>'+
+          '<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%"></div></div>'+
+          '<div class="cr-sub">使った '+yen(used)+' / '+yen(budget)+'</div>'+
+          '</div>';
+      });
+      catRemEl.innerHTML=crHtml;
+      // のこり日数＋ペース（合算ベースで1組だけ）。マイナス時・過去期はペース非表示
+      if(!isCurrent){
+        footEl.innerHTML='のこり <span class="pn">'+daysLeft+'日</span>';
+      }else if(remain<0){
+        footEl.innerHTML='のこり <span class="pn">'+daysLeft+'日</span>';
+      }else if(daysLeft<=1){
+        footEl.innerHTML='のこり <span class="pn">'+daysLeft+'日</span> ・ 今日が最後の日';
+      }else{
+        var pace=Math.round(remain/daysLeft/100)*100;
+        footEl.innerHTML='のこり <span class="pn">'+daysLeft+'日</span> ・ 今日のペース <span class="pn">1日 '+yen(pace)+' くらい</span>';
+      }
     }
-    $("budgetV").textContent=yen(budgetTotal);
-    $("spentV").textContent=yen(spent);
-    var daysLeft=daysLeftIn(c,new Date());
-    $("daysV").textContent=isCurrent?(daysLeft+"日"):"―";
-    var paceEl=$("paceLine");
-    if(isCurrent && hasBudget && remain>=0){
-      if(daysLeft<=1){ paceEl.innerHTML='今日が最後の日'; }
-      else{ var pace=Math.round(remain/daysLeft/100)*100; paceEl.innerHTML='今日のペース目安 <span class="pn">1日 '+yen(pace)+' くらい</span>'; }
-    }else{ paceEl.innerHTML=""; }
     var byCat={}, bySub={}, bySubItems={}, subById={}; DB.subcats.forEach(function(sc){ subById[sc.id]=sc; });
     // 1支出を「費目→細分類」に振り分ける共通処理。items[] があれば item 単位で正しい catId/subId に割る
     // （もやしは野菜・クロワッサンは主食）。品名は bySubItems に貯めて細分類の下に出す。
