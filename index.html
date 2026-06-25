@@ -109,6 +109,26 @@
   .qty-in button.qty-cancel{background:#fff;color:var(--ink-sub);border:1.5px solid var(--line);}
   .qty-in button.qty-cancel:active{background:var(--line);}
   .qty-edit-btn{background:none;border:none;color:var(--ink-sub);font-size:11px;font-weight:600;cursor:pointer;padding:0 2px;text-decoration:underline;}
+  /* ===== 価格比較：店ごとの行（モバイル最優先＝縦に積む。店名は横書き1行）===== */
+  .cmp-group{margin-bottom:18px;}
+  .cmp-group .cmp-gname{font-weight:700;margin-bottom:8px;}
+  .store-row{border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:8px;background:#fff;}
+  .store-row.here{background:var(--line);border-color:var(--teal);}
+  .store-row .sr-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+  .store-row .sr-store{font-size:15px;font-weight:700;color:var(--ink);word-break:normal;overflow-wrap:anywhere;min-width:0;}
+  .store-row .sr-unit{font-size:16px;font-weight:700;white-space:nowrap;flex:0 0 auto;}
+  .store-row .sr-unit .warn-flag{font-weight:700;}
+  .store-row .sr-meta{font-size:13px;color:var(--ink-sub);margin-top:5px;}
+  .store-row .sr-meta .sr-price b{color:var(--ink);font-weight:700;}
+  .store-row .sr-tags{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  .store-row .sr-actions{margin-top:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .store-row .sr-actions .del{margin-left:auto;}
+  /* 特売トグル（除外の消しゴム＝控えめ・後ろ向き／内容量の行とは分離） */
+  .sale-toggle{display:flex;align-items:center;gap:9px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);cursor:pointer;}
+  .sale-toggle .sbox{width:21px;height:21px;border-radius:6px;border:2px solid var(--line);flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px;background:#fff;}
+  .sale-toggle.on .sbox{background:var(--warn);border-color:var(--warn);}
+  .sale-toggle .stx{font-size:13px;color:var(--ink-sub);line-height:1.35;}
+  .sale-toggle .stx b{font-weight:700;color:var(--ink);}
   .mirror-card{background:transparent;box-shadow:none;border:1px solid var(--line);border-left:3px solid var(--line);padding:14px 16px;}
   .mirror-card .sec-title{color:var(--ink-sub);font-size:12px;font-weight:600;letter-spacing:0;}
   .mirror-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;}
@@ -121,6 +141,7 @@
   .mirror-msg.calm{color:var(--ink-sub);}
   .mirror-card .mirror-row:not(:first-of-type){margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);}
   .mirror-grow{font-size:12px;color:var(--ink-sub);margin-top:12px;}
+  .mirror-excl{font-size:12px;color:var(--ink-sub);margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);line-height:1.45;}
   .bar-item.clickable{cursor:pointer;}
   .bar-head .caret{color:var(--ink-sub);font-size:12px;margin-left:6px;transition:transform .2s;display:inline-block;}
   .bar-item.open .caret{transform:rotate(90deg);}
@@ -787,6 +808,25 @@
   function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
   function yen(n){ n=Math.round(n||0); return "¥"+n.toLocaleString("ja-JP"); }
   function todayStr(){ var d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+  // 日時スタンプ（バックアップのファイル名用：同日複数回でも上書きしない）
+  function nowStamp(){ var d=new Date(),p=function(n){return String(n).padStart(2,"0");}; return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"_"+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds()); }
+  // 任意のJSONオブジェクトを名前を付けてダウンロード保存（バックアップ共通）
+  function downloadObjAsJSON(obj, filename){
+    var blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a"); a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  }
+  // 取り込み事故防止：データの件数を数える（支出・価格・店）
+  function countItems(obj){
+    var o=obj||{};
+    return {
+      expenses:(o.expenses&&o.expenses.length)||0,
+      prices:(o.prices&&o.prices.length)||0,
+      stores:(o.stores&&o.stores.length)||0
+    };
+  }
   function catById(id){ for(var i=0;i<DB.cats.length;i++){ if(DB.cats[i].id===id) return DB.cats[i]; } return {name:"不明",icon:"❓"}; }
   function startDay(){ var d=Number(DB.cycleStartDay); return (isFinite(d)&&d>=1)?Math.min(28,Math.max(1,Math.round(d))):25; }
   function cycleOf(refDate){
@@ -868,8 +908,12 @@
     var slot=$("priceMirror"); if(!slot) return;
     // date を持つ価格だけ（後方互換：無印は対象外）。
     // 特売（お一人様1点・saleLimited）は通常相場でない＝鏡の「いつもの値段」比較から外す（底値判定を歪めない）。
-    var dated=(DB.prices||[]).filter(function(p){ return p.date && /^\d{4}-\d{2}-\d{2}$/.test(p.date) && !p.saleLimited; });
-    if(!dated.length){ slot.innerHTML=""; return; } // 事実が無い日は枠ごと消す
+    var datedAll=(DB.prices||[]).filter(function(p){ return p.date && /^\d{4}-\d{2}-\d{2}$/.test(p.date); });
+    var dated=datedAll.filter(function(p){ return !p.saleLimited; });
+    // 特売で外した品（日付あり）。除外を黙らず、控えめに事実だけ1〜2行で添える。
+    var excluded=datedAll.filter(function(p){ return p.saleLimited; })
+                  .sort(function(a,b){ return (b.date+(b.id||"")).localeCompare(a.date+(a.id||"")); });
+    if(!dated.length && !excluded.length){ slot.innerHTML=""; return; } // 事実が無い日は枠ごと消す
     // 直近に記録した買い物（date降順、同日内はid降順）。先頭1〜2件を鏡に出す。
     var recent=dated.slice().sort(function(a,b){ return (b.date+(b.id||"")).localeCompare(a.date+(a.id||"")); });
     var lines=[];
@@ -882,9 +926,17 @@
       lines.push(buildMirrorLine(p, dated));
     }
     var inner=lines.map(function(l){ return l; }).join("");
+    // 特売で外した品を黙らず添える（事実だけ・評価語なし・--ok=達成色は使わない）。直近1〜2件。
+    var exclLines="";
+    for(var ei=0;ei<excluded.length && ei<2;ei++){
+      var ep=excluded[ei];
+      var estore=ep.store?escapeHtml(ep.store)+"の":"";
+      exclLines+='<div class="mirror-excl">'+estore+escapeHtml(ep.name)+' '+yen(ep.price)+
+                 ' は割引で買ったので、いつもの値段の比べっこから外しました</div>';
+    }
     // データが薄い初期だけ（datedな価格記録が3件未満）、末尾に「ここは育つ」一文。3件以上で自動で消える。
-    var grow=(dated.length<3)?'<div class="mirror-grow">記録がたまるほど、ここで前回との差が見えるようになります</div>':'';
-    slot.innerHTML='<div class="card mirror-card"><h3 class="sec-title">🔁 記録の鏡</h3>'+inner+grow+'</div>';
+    var grow=(dated.length>0 && dated.length<3)?'<div class="mirror-grow">記録がたまるほど、ここで前回との差が見えるようになります</div>':'';
+    slot.innerHTML='<div class="card mirror-card"><h3 class="sec-title">🔁 記録の鏡</h3>'+inner+exclLines+grow+'</div>';
   }
   // 1品ぶんの行。過去の同名(name+unit)記録と「今回/前回」を中立に並べ、安い時だけ静かに声かけ。
   function buildMirrorLine(p, dated){
@@ -1301,13 +1353,13 @@
         var hasMember=g.items.some(function(it){return it.memberPrice;});
         var hasSale=g.items.some(function(it){return it.saleLimited;});
         var perWord=unitPerLabel(g.unit);
-        html+='<div style="margin-bottom:16px;">';
-        html+='<div style="font-weight:700;margin-bottom:6px;">'+escapeHtml(g.name)+' <span class="muted small">（'+unitPerLabel(g.unit)+'）</span></div>';
-        html+='<table><tr><th>店</th><th>価格/量</th><th>単価'+(hasMember?'<span class="muted small">（一般推定）</span>':'')+'</th><th></th></tr>';
+        html+='<div class="cmp-group">';
+        html+='<div class="cmp-gname">'+escapeHtml(g.name)+' <span class="muted small">（'+unitPerLabel(g.unit)+'）</span></div>';
+        // 店ごとの行を「カードで縦に積む」モバイル最優先レイアウト（店名は横書き1行・1文字折りなし）。
         sorted.forEach(function(it){
           // 特売（saleLimited）は最安判定の対象外＝"いつもの最安"として印を付けない。
           var isBest=!it.qtyUnknown&&!it.saleLimited&&it.unitPrice===best&&isFinite(best);
-          // 今いる店モード：その店の行を太字でハイライト（新色なし＝太字のみ）。
+          // 今いる店モード：その店の行を背景＋店名太字でハイライト。
           var hereHi=(hereStore && it.store===hereStore);
           // 内容量UI：待ち品はその場で入力欄／既に量がある品は控えめに「なおす」を出す（単位も直せる）。
           // 単位セレクタ付き（g/ml/個/本/枚/パック）。数字パッド・中立ラベル。
@@ -1331,23 +1383,33 @@
           // 価格セル：割引品は「あなた¥X／一般推定¥Y」、通常品は ¥price
           var priceCell;
           if(it.memberPrice){
-            priceCell='<span class="muted small">あなた</span>'+yen(it.price)+'<br><span class="muted small">一般推定 '+yen(Math.round(it.cmpPrice))+'</span>';
-          }else{ priceCell=yen(it.price); }
-          // 単価セル：qtyUnknown は単価を出せないが「記録あり」を事実として見せる（記録なし扱いにしない）。
+            priceCell='<span class="muted small">あなた</span><b>'+yen(it.price)+'</b> <span class="muted small">一般推定 '+yen(Math.round(it.cmpPrice))+'</span>';
+          }else{ priceCell='<b>'+yen(it.price)+'</b>'; }
+          // 単価（カード右上の主役）：qtyUnknown は単価を出せないが「記録あり」を事実として見せる。
           var unitCell;
           if(it.qtyUnknown){
-            var dl=cmpDateLabel(it.date);
-            unitCell='<span class="warn-flag">⚠️'+perWord+'待ち</span>'+(dl?'<br><span class="muted small">'+dl+'</span>':'');
-          }else{ unitCell='<b>'+yen(it.unitPrice)+'</b>'; }
-          // 特売は店名の隣に中立ラベル（既存 warn-flag スタイルを流用＝新色なし）。
-          var saleTag=it.saleLimited?' <span class="warn-flag">特売（お一人様1点）</span>':'';
-          var storeCell=hereHi?'<b>'+escapeHtml(it.store||"―")+'</b>':escapeHtml(it.store||"―");
-          html+='<tr'+(hereHi?' style="background:var(--line);"':'')+'><td>'+storeCell+saleTag+'</td><td>'+priceCell+' / '+qtyCell+'</td><td>'+unitCell+'</td>'+
-                '<td>'+(isBest?'<span class="best">最安</span>':'')+' <button class="del" data-pid="'+it.id+'">×</button></td></tr>';
+            unitCell='<span class="warn-flag">⚠️'+perWord+'待ち</span>';
+          }else{ unitCell=yen(it.unitPrice); }
+          var dl=it.qtyUnknown?cmpDateLabel(it.date):"";
+          // 割引は店名の下に中立タグ（既存 warn-flag スタイルを流用＝新色なし）。半額・見切り・特売を包む中立語。
+          var saleTag=it.saleLimited?'<span class="warn-flag">割引'+(it.note?'（'+escapeHtml(it.note)+'）':'')+'</span>':'';
+          // 割引トグル（"鏡が狂わないよう掃除する消しゴム"＝控えめ・後ろ向き／内容量の行とは分離）。
+          var saleToggle='<div class="sale-toggle'+(it.saleLimited?' on':'')+'" data-saleid="'+it.id+'" role="button">'+
+            '<span class="sbox">'+(it.saleLimited?'✓':'')+'</span>'+
+            '<span class="stx"><b>割引で買った</b><br>いつもの値段の参考から外します</span></div>';
+          html+='<div class="store-row'+(hereHi?' here':'')+'">'+
+            '<div class="sr-top">'+
+              '<span class="sr-store">'+escapeHtml(it.store||"―")+'</span>'+
+              '<span class="sr-unit">'+unitCell+(isBest?' <span class="best">最安</span>':'')+'</span>'+
+            '</div>'+
+            (saleTag?'<div class="sr-tags">'+saleTag+'</div>':'')+
+            '<div class="sr-meta"><span class="sr-price">'+priceCell+'</span>'+(dl?' <span class="muted small">'+dl+'</span>':'')+'</div>'+
+            '<div class="sr-actions">'+qtyCell+'<button class="del" data-pid="'+it.id+'">× 削除</button></div>'+
+            saleToggle+
+          '</div>';
         });
-        html+='</table>';
         if(hasMember){ html+='<div class="warn-note">ℹ️ サニーの食品は<b>登録者の割引価格</b>（一般店頭はこれより高め）。他店と公平に比べるため、単価は<b>割引を戻した一般推定（÷0.92）の目安</b>で並べています。8%は仮定のため「最安」と断定はできません。酒・タバコは割引対象外＝定価です。</div>'; }
-        if(hasSale){ html+='<div class="warn-note">ℹ️「特売（お一人様1点）」は記録した日（限定数の特売）の値段です。<b>いつもの値段とは別もの</b>なので、最安には数えていません。</div>'; }
+        if(hasSale){ html+='<div class="warn-note">ℹ️「割引」は記録した日に値引きされた値段です（半額・見切り・特売など）。<b>いつもの値段とは別もの</b>なので、最安には数えていません。</div>'; }
         if(hasUnknown){ html+='<div class="warn-note">⚠️ 内容量(量)が未入力の品は単価を比較できません。レシートの内容量を入れると単価が出ます。</div>'; }
         html+='</div>';
       });
@@ -1402,6 +1464,19 @@
       var cbtns=box.querySelectorAll('.qty-cancel[data-editid]');
       for(var e2=0;e2<cbtns.length;e2++){
         cbtns[e2].addEventListener("click", function(){ toggleEdit(this.getAttribute("data-editid"), false); });
+      }
+      // 特売トグル：saleLimited を ON/OFF（既定オフ・1タップで可逆・確認なし）。
+      // フラグだけ＝割引種別/割引前価格は持たない。save()で /vault 同期＝往復で消えない。
+      function toggleSale(id){
+        var p=null;
+        for(var j=0;j<DB.prices.length;j++){ if(DB.prices[j].id===id){ p=DB.prices[j]; break; } }
+        if(!p) return;
+        p.saleLimited=!p.saleLimited;
+        save(); renderCompare();   // 派手に動かさない：再描画で印が付く/外れるだけ（お得額・累計は出さない）
+      }
+      var sbtns=box.querySelectorAll('.sale-toggle[data-saleid]');
+      for(var e3=0;e3<sbtns.length;e3++){
+        sbtns[e3].addEventListener("click", function(){ toggleSale(this.getAttribute("data-saleid")); });
       }
     }
     var sel=$("vProd"); sel.innerHTML="";
@@ -1485,7 +1560,7 @@
       msg+='<br><span class="small muted">※ 内容量不明のため比較から外した店：'+escapeHtml(skipped.map(function(p){return p.store||"―";}).join("・"))+'</span>';
     }
     if(saleItems.length){
-      msg+='<br><span class="small muted">※ 特売（お一人様1点）は通常の値段でないため比較から外しました：'+escapeHtml(saleItems.map(function(p){return p.store||"―";}).join("・"))+'</span>';
+      msg+='<br><span class="small muted">※ 割引で買った品は通常の値段でないため比較から外しました：'+escapeHtml(saleItems.map(function(p){return p.store||"―";}).join("・"))+'</span>';
     }
     if(anyMember){
       msg+='<br><span class="small muted">※ サニー食品は割引価格を<b>8%戻した一般推定（÷0.92）</b>で計算した目安です（8%は仮定）。</span>';
@@ -1620,35 +1695,71 @@
   });
 
   // Macのデータを取り込む（初回移行）
+  // 取り込みは「全上書き（マージではない）」＝クラウドの今のデータは消える。
+  // 事故防止の三段：①取り込み前に現クラウドを自動バックアップDL ②消える件数を具体的に出して二重確認 ③クラウドが空なら警告なしでそのまま。
   $("migrateFile").addEventListener("change", function(e){
     var f=e.target.files[0]; if(!f) return;
     e.target.value="";
     var reader=new FileReader();
     reader.onload=function(){
+      var d;
       try{
-        var d=JSON.parse(reader.result);
+        d=JSON.parse(reader.result);
         if(!d || typeof d!=="object") throw 0;
-        // クラウドに既にデータがあれば確認（version>0）
-        var proceed=function(){
-          DB=normalize(d);
-          selectedCat=DB.cats[0]?DB.cats[0].id:null;
-          renderAll();
-          save().then(function(ok){ if(ok){ renderSettings(); toast("Macのデータを取り込んでクラウドへ保存しました ✓"); } });
-        };
-        if(serverVersion>0){
-          if(confirm("クラウドに既にデータがあります。Macのデータで上書きしますか？\n（クラウドの現在のデータは消えます）")) proceed();
-        }else{ proceed(); }
-      }catch(err){ toast("ファイルを読めませんでした"); }
+      }catch(err){ toast("ファイルを読めませんでした"); return; }
+
+      // 取り込んで保存する（最後の確定処理）
+      var proceed=function(){
+        DB=normalize(d);
+        selectedCat=DB.cats[0]?DB.cats[0].id:null;
+        renderAll();
+        save().then(function(ok){ if(ok){ renderSettings(); toast("Macのデータを取り込んでクラウドへ保存しました ✓"); } });
+      };
+
+      // クラウドの「今の本当のデータ」を取り直して、消えるものを見極める。
+      // （serverVersionだけだと古い値で判断してしまうため、必ず最新を読み直す）
+      setSync("クラウドを確認中…");
+      readVaultRaw().then(function(remote){
+        // クラウドが空（暗号文なし）＝事故にならない → 警告なしでそのまま取り込む
+        if(!remote || !remote.ct){
+          setSync("クラウド：データなし");
+          proceed();
+          return;
+        }
+        // 暗号文はあるが復号できない（PIN違い等）→ 中身を確認できないので念のため止める
+        return decryptVault(aesKey, remote).then(function(cloudObj){
+          var c=countItems(cloudObj), l=countItems(d);
+          var hasCloudData=(c.expenses+c.prices+c.stores)>0;
+          if(!hasCloudData){
+            // 暗号文はあるが中身は実質空（初期状態）→ 失うものがない → そのまま取り込む
+            setSync("クラウド：データなし");
+            proceed();
+            return;
+          }
+          // ① まず現クラウドの中身を自動でバックアップ保存（何があっても直前に戻せる）
+          downloadObjAsJSON(cloudObj, "クラウド家計簿_取り込み前バックアップ_"+nowStamp()+".json");
+          // ② 具体的な件数を出して二重確認
+          var msg=
+            "クラウドにある支出"+c.expenses+"件・価格"+c.prices+"件・店"+c.stores+"件を、\n"+
+            "このファイル（支出"+l.expenses+"件・価格"+l.prices+"件・店"+l.stores+"件）でまるごと置き換えます。\n"+
+            "クラウドだけにあるデータは消えます。\n\n"+
+            "（念のため、今のクラウドの内容をバックアップとして書き出しました）\n\n"+
+            "本当に置き換えますか？";
+          setSync(serverVersion>0?("✓ 同期済み（version "+serverVersion+"）"):"クラウド：確認中");
+          if(confirm(msg)){ proceed(); }
+          else{ toast("取り込みをやめました"); }
+        }).catch(function(){
+          // 復号できない＝中身を確認できない。安全側で止める（黙って上書きしない）
+          setSync("⚠️ 確認できません");
+          toast("クラウドの中身を確認できませんでした（PINが違う可能性）。取り込みを中止しました");
+        });
+      }).catch(function(err){ console.error(err); setSync("⚠️ 読み込み失敗"); toast("クラウドの確認に失敗。取り込みを中止しました"); });
     };
     reader.readAsText(f);
   });
 
   $("exportBtn").addEventListener("click", function(){
-    var blob=new Blob([JSON.stringify(DB,null,2)],{type:"application/json"});
-    var url=URL.createObjectURL(blob);
-    var a=document.createElement("a"); a.href=url; a.download="家計簿バックアップ_"+todayStr()+".json";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(function(){URL.revokeObjectURL(url);},1000);
+    downloadObjAsJSON(DB, "家計簿バックアップ_"+todayStr()+".json");
     toast("書き出しました ✓");
   });
   $("wipeBtn").addEventListener("click", function(){
