@@ -105,6 +105,10 @@
   .qty-in .qu{font-size:13px;color:var(--ink-sub);}
   .qty-in button{border:none;background:var(--teal);color:#fff;font-size:13px;font-weight:700;padding:7px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;}
   .qty-in button:active{background:var(--teal-dark);}
+  .qty-in select.qty-unit{padding:6px 6px;font-size:13px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);}
+  .qty-in button.qty-cancel{background:#fff;color:var(--ink-sub);border:1.5px solid var(--line);}
+  .qty-in button.qty-cancel:active{background:var(--line);}
+  .qty-edit-btn{background:none;border:none;color:var(--ink-sub);font-size:11px;font-weight:600;cursor:pointer;padding:0 2px;text-decoration:underline;}
   .mirror-card{background:transparent;box-shadow:none;border:1px solid var(--line);border-left:3px solid var(--line);padding:14px 16px;}
   .mirror-card .sec-title{color:var(--ink-sub);font-size:12px;font-weight:600;letter-spacing:0;}
   .mirror-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;}
@@ -315,7 +319,10 @@
       <select id="pUnit">
         <option value="g">g（100gあたりで比較）</option>
         <option value="ml">ml（100mlあたりで比較）</option>
-        <option value="kosu">個・枚（1個あたりで比較）</option>
+        <option value="kosu">個（1個あたりで比較）</option>
+        <option value="hon">本（1本あたりで比較）</option>
+        <option value="mai">枚（1枚あたりで比較）</option>
+        <option value="pack">パック（1パックあたりで比較）</option>
       </select>
       <label>記録した日</label>
       <input type="date" id="pDate">
@@ -691,6 +698,8 @@
       d.prices.forEach(function(p){
         if(p.qty===null||p.qty===undefined||p.qty===""){ p.qty=null; }
         else{ var q=Number(p.qty); p.qty=(isFinite(q)&&q>0)?q:null; }
+        // unit は後方互換：既知の単位（g/ml/kosu/hon/mai/pack）以外は g に寄せる。
+        if(!isValidUnit(p.unit)) p.unit="g";
         // date は後方互換：YYYY-MM-DD以外（未定義含む）は空のまま許容（subId/§8と同じ）
         p.date = (typeof p.date==="string" && /^\d{4}-\d{2}-\d{2}$/.test(p.date)) ? p.date : "";
         // memberPrice は後方互換：true のみ採用。未定義/その他は通常価格扱い（無印）
@@ -893,7 +902,7 @@
     var cu=priceUnitVal(cur), pu=priceUnitVal(prev);
     var useUnit=(cu!=null && pu!=null);
     var curV=useUnit?cu:Number(cur.price), prevV=useUnit?pu:Number(prev.price);
-    var perWord=(cur.unit==="kosu")?"1個あたり":(cur.unit==="ml")?"100mlあたり":"100gあたり";
+    var perWord=unitPerLabel(cur.unit);
     var fmt=function(v){ return useUnit?yen(v):yen(v); };
     var unitTag=useUnit?('<span class="muted small">（'+perWord+'）</span>'):'';
     var cmp='<div class="mirror-cmp">今回 <b>'+fmt(curV)+'</b> / 前回 <b>'+fmt(prevV)+'</b> '+unitTag+'</div>';
@@ -1185,9 +1194,22 @@
   // ============================================================
   //  価格比較（既存ロジックそのまま）
   // ============================================================
-  var UNIT_LABEL={g:"g",ml:"ml",kosu:"個"};
-  function unitPer(unit){ return unit==="kosu"?1:100; }
-  function unitPerLabel(unit){ return unit==="kosu"?"1個あたり":(unit==="ml"?"100mlあたり":"100gあたり"); }
+  // 単位の知識はここに一元化（単位を増やしたら全箇所が追従する）。
+  // g/ml＝重さ・容量系（100単位で比較）。kosu/hon/mai/pack＝個数系（1単位で比較）。
+  var UNIT_LABEL={g:"g",ml:"ml",kosu:"個",hon:"本",mai:"枚",pack:"パック"};
+  var UNIT_PER_LABEL={g:"100gあたり",ml:"100mlあたり",kosu:"1個あたり",hon:"1本あたり",mai:"1枚あたり",pack:"1パックあたり"};
+  var COUNT_UNITS={kosu:1,hon:1,mai:1,pack:1};                 // 個数系（100倍しない）
+  var UNIT_ORDER=["g","ml","kosu","hon","mai","pack"];          // セレクタの並び
+  function isValidUnit(u){ return UNIT_LABEL.hasOwnProperty(u); }
+  function unitPer(unit){ return COUNT_UNITS[unit]?1:100; }     // g/ml=100、個数系=1
+  function unitPerLabel(unit){ return UNIT_PER_LABEL[unit]||UNIT_PER_LABEL.g; }
+  function unitShort(unit){ return UNIT_LABEL[unit]||"g"; }
+  // 単位セレクタの<option>群（selected=現在unit）。
+  function unitOptionsHtml(selUnit){
+    return UNIT_ORDER.map(function(u){
+      return '<option value="'+u+'"'+(u===selUnit?' selected':'')+'>'+UNIT_LABEL[u]+'</option>';
+    }).join("");
+  }
   // 登録者割引（サニー食品のみ・酒/非サニーは対象外＝定価）。8%は仮定＝「推定・目安」と明示し断定しない。
   var MEMBER_DISCOUNT=0.08;
   // フラグ付き品の「一般客の推定店頭価格」＝割引価格 ÷ 0.92（割引を戻した目安）。
@@ -1278,7 +1300,7 @@
         var hasUnknown=g.items.some(function(it){return it.qtyUnknown;});
         var hasMember=g.items.some(function(it){return it.memberPrice;});
         var hasSale=g.items.some(function(it){return it.saleLimited;});
-        var perWord=g.unit==="kosu"?"1個あたり":(g.unit==="ml"?"100mlあたり":"100gあたり");
+        var perWord=unitPerLabel(g.unit);
         html+='<div style="margin-bottom:16px;">';
         html+='<div style="font-weight:700;margin-bottom:6px;">'+escapeHtml(g.name)+' <span class="muted small">（'+unitPerLabel(g.unit)+'）</span></div>';
         html+='<table><tr><th>店</th><th>価格/量</th><th>単価'+(hasMember?'<span class="muted small">（一般推定）</span>':'')+'</th><th></th></tr>';
@@ -1287,15 +1309,25 @@
           var isBest=!it.qtyUnknown&&!it.saleLimited&&it.unitPrice===best&&isFinite(best);
           // 今いる店モード：その店の行を太字でハイライト（新色なし＝太字のみ）。
           var hereHi=(hereStore && it.store===hereStore);
-          // 内容量待ちの品には、その場で内容量を入れる小UIを出す（数字パッド・中立ラベル）。
+          // 内容量UI：待ち品はその場で入力欄／既に量がある品は控えめに「なおす」を出す（単位も直せる）。
+          // 単位セレクタ付き（g/ml/個/本/枚/パック）。数字パッド・中立ラベル。
           var qtyCell;
           if(it.qtyUnknown){
-            var uLabel=UNIT_LABEL[it.unit]||"g";
+            // 待ち状態：従来どおり入力欄を開いておく（数値＋単位セレクタ）。
             qtyCell='<span class="warn-flag">内容量待ち</span>'+
               '<div class="qty-in"><input type="number" inputmode="numeric" min="0" placeholder="内容量" data-qtid="'+it.id+'">'+
-              '<span class="qu">'+uLabel+'</span>'+
+              '<select class="qty-unit" data-qtid="'+it.id+'">'+unitOptionsHtml(it.unit)+'</select>'+
               '<button data-qtid="'+it.id+'">入れる</button></div>';
-          }else{ qtyCell=escapeHtml(String(it.qty))+UNIT_LABEL[it.unit]; }
+          }else{
+            // 量あり：普段は値だけ。控えめな「なおす」でトグル開閉（数値＝現在値・単位＝現在unit）。
+            qtyCell='<span class="qty-show">'+escapeHtml(String(it.qty))+unitShort(it.unit)+'</span>'+
+              ' <button type="button" class="qty-edit-btn" data-editid="'+it.id+'">なおす</button>'+
+              '<div class="qty-in qty-edit" data-editid="'+it.id+'" style="display:none;">'+
+              '<input type="number" inputmode="numeric" min="0" value="'+escapeHtml(String(it.qty))+'" data-qtid="'+it.id+'">'+
+              '<select class="qty-unit" data-qtid="'+it.id+'">'+unitOptionsHtml(it.unit)+'</select>'+
+              '<button data-qtid="'+it.id+'">確定</button>'+
+              '<button type="button" class="qty-cancel" data-editid="'+it.id+'">やめる</button></div>';
+          }
           // 価格セル：割引品は「あなた¥X／一般推定¥Y」、通常品は ¥price
           var priceCell;
           if(it.memberPrice){
@@ -1328,17 +1360,23 @@
           save(); renderCompare(); toast("削除しました");
         });
       }
-      // 内容量待ちの品に、その場で内容量(qty)を入れる。対象は price の id で特定（店ごとの1行）。
+      // 内容量(qty)と単位(unit)を、その場で入れる／なおす。対象は price の id で特定（店ごとの1行）。
       function applyQty(id){
-        var inp=box.querySelector('.qty-in input[data-qtid="'+id+'"]');
+        // 編集中(qty-edit)が開いていればそちらの入力を優先、なければ待ち状態の入力。
+        var inp=box.querySelector('.qty-edit[data-editid="'+id+'"] input[data-qtid="'+id+'"]')
+             || box.querySelector('.qty-in input[data-qtid="'+id+'"]');
+        var usel=box.querySelector('.qty-edit[data-editid="'+id+'"] select[data-qtid="'+id+'"]')
+             || box.querySelector('.qty-in select[data-qtid="'+id+'"]');
         if(!inp) return;
         var raw=(inp.value||"").trim();
         var n=Number(raw);
         if(raw==="" || !isFinite(n) || n<=0){ toast("内容量は数字で入れてください"); return; }
+        var u=(usel && isValidUnit(usel.value)) ? usel.value : null;
         var p=null;
         for(var j=0;j<DB.prices.length;j++){ if(DB.prices[j].id===id){ p=DB.prices[j]; break; } }
         if(!p){ return; }
         p.qty=n; p.qtyUnknown=false;
+        if(u) p.unit=u;
         save(); renderCompare(); toast("内容量を入れました ✓");
       }
       var qbtns=box.querySelectorAll('.qty-in button[data-qtid]');
@@ -1348,6 +1386,22 @@
       var qins=box.querySelectorAll('.qty-in input[data-qtid]');
       for(var c=0;c<qins.length;c++){
         qins[c].addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); applyQty(this.getAttribute("data-qtid")); } });
+      }
+      // 「なおす」＝編集欄を開く（値だけ表示→数値＋単位の編集欄）。「やめる」＝閉じる。
+      function toggleEdit(id, open){
+        var ed=box.querySelector('.qty-edit[data-editid="'+id+'"]'); if(!ed) return;
+        var btn=box.querySelector('.qty-edit-btn[data-editid="'+id+'"]');
+        ed.style.display=open?"flex":"none";
+        if(btn) btn.style.display=open?"none":"inline-block";
+        if(open){ var f=ed.querySelector('input[data-qtid]'); if(f){ f.focus(); f.select&&f.select(); } }
+      }
+      var ebtns=box.querySelectorAll('.qty-edit-btn[data-editid]');
+      for(var e1=0;e1<ebtns.length;e1++){
+        ebtns[e1].addEventListener("click", function(){ toggleEdit(this.getAttribute("data-editid"), true); });
+      }
+      var cbtns=box.querySelectorAll('.qty-cancel[data-editid]');
+      for(var e2=0;e2<cbtns.length;e2++){
+        cbtns[e2].addEventListener("click", function(){ toggleEdit(this.getAttribute("data-editid"), false); });
       }
     }
     var sel=$("vProd"); sel.innerHTML="";
@@ -1370,7 +1424,7 @@
     var price=Number($("pPrice").value);
     var qtyRaw=$("pQty").value.trim();
     var qty=qtyRaw===""?null:Number(qtyRaw);
-    var unit=$("pUnit").value;
+    var unit=$("pUnit").value; if(!isValidUnit(unit)) unit="g";
     if(!name){ toast("商品名を入れてください"); return; }
     if(!price||price<=0){ toast("価格を入れてください"); return; }
     if(qtyRaw!=="" && (!qty||qty<=0)){ toast("内容量は数字で（不明なら空欄でOK）"); return; }
