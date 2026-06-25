@@ -151,6 +151,10 @@
   .subrow:last-child{border-bottom:none;}
   .subrow .sl{color:var(--ink-sub);}
   .subrow .sv{font-weight:600;}
+  .itemlist{margin:2px 0 6px 16px;}
+  .itemrow{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-sub);padding:3px 0;}
+  .itemrow .il{opacity:.85;}
+  .itemrow .iv{}
 
   /* ===== ふりかえりカード（鏡と同じ従属箱の流儀）===== */
   .review-card{background:transparent;box-shadow:none;border:1px solid var(--line);border-left:3px solid var(--teal);padding:14px 16px;}
@@ -1086,14 +1090,31 @@
       if(daysLeft<=1){ paceEl.innerHTML='今日が最後の日'; }
       else{ var pace=Math.round(remain/daysLeft/100)*100; paceEl.innerHTML='今日のペース目安 <span class="pn">1日 '+yen(pace)+' くらい</span>'; }
     }else{ paceEl.innerHTML=""; }
-    var byCat={}, bySub={}, subById={}; DB.subcats.forEach(function(sc){ subById[sc.id]=sc; });
-    list.forEach(function(e){
-      var amt=Number(e.amount||0);
-      byCat[e.catId]=(byCat[e.catId]||0)+amt;
-      var sc=e.subId&&subById[e.subId]?subById[e.subId]:null;
-      var cKey=sc?sc.parent:e.catId; var sKey=sc?sc.id:"_none";
+    var byCat={}, bySub={}, bySubItems={}, subById={}; DB.subcats.forEach(function(sc){ subById[sc.id]=sc; });
+    // 1支出を「費目→細分類」に振り分ける共通処理。items[] があれば item 単位で正しい catId/subId に割る
+    // （もやしは野菜・クロワッサンは主食）。品名は bySubItems に貯めて細分類の下に出す。
+    function tally(catId, subId, amt, name){
+      byCat[catId]=(byCat[catId]||0)+amt;
+      var sc=subId&&subById[subId]?subById[subId]:null;
+      var cKey=sc?sc.parent:catId; var sKey=sc?sc.id:"_none";
       if(!bySub[cKey]) bySub[cKey]={};
       bySub[cKey][sKey]=(bySub[cKey][sKey]||0)+amt;
+      if(name){
+        if(!bySubItems[cKey]) bySubItems[cKey]={};
+        if(!bySubItems[cKey][sKey]) bySubItems[cKey][sKey]=[];
+        bySubItems[cKey][sKey].push({name:name, v:amt});
+      }
+    }
+    list.forEach(function(e){
+      var items=Array.isArray(e.items)?e.items:null;
+      if(items && items.length){
+        // items[] を持つ支出は item ごとに自前の catId/subId で集計（後方互換：無い支出は従来どおり）
+        items.forEach(function(it){
+          tally(it.catId||e.catId, it.subId||e.subId, Number(it.amount||0), it.name||"");
+        });
+      }else{
+        tally(e.catId, e.subId, Number(e.amount||0), null);
+      }
     });
     var rows=[]; DB.cats.forEach(function(cc){ var v=byCat[cc.id]||0; if(v>0) rows.push({c:cc,v:v}); });
     rows.sort(function(a,b){ return b.v-a.v; });
@@ -1116,16 +1137,26 @@
       var pct=Math.max(4,Math.round(r.v/maxv*100));
       var subs=bySub[r.c.id]||{};
       var subRows=[];
+      var catItems=bySubItems[r.c.id]||{};
       Object.keys(subs).forEach(function(sk){
-        if(sk==="_none"){ subRows.push({name:"（細分類なし）",icon:"・",v:subs[sk],none:true}); }
-        else{ var sc=subById[sk]; subRows.push({name:sc?sc.name:"不明",icon:sc?sc.icon:"❓",v:subs[sk]}); }
+        if(sk==="_none"){ subRows.push({name:"（細分類なし）",icon:"・",v:subs[sk],none:true,sk:sk}); }
+        else{ var sc=subById[sk]; subRows.push({name:sc?sc.name:"不明",icon:sc?sc.icon:"❓",v:subs[sk],sk:sk}); }
       });
       subRows.sort(function(a,b){ return b.v-a.v; });
       var hasDetail=subRows.length>1||(subRows.length===1&&!subRows[0].none);
       var breakHtml="";
       if(hasDetail){
         breakHtml='<div class="subbreak">';
-        subRows.forEach(function(s){ breakHtml+='<div class="subrow"><span class="sl">'+escapeHtml(s.icon)+" "+escapeHtml(s.name)+'</span><span class="sv">'+yen(s.v)+'</span></div>'; });
+        subRows.forEach(function(s){
+          breakHtml+='<div class="subrow"><span class="sl">'+escapeHtml(s.icon)+" "+escapeHtml(s.name)+'</span><span class="sv">'+yen(s.v)+'</span></div>';
+          // その細分類に品名(items[])があれば「品名 ¥金額」を控えめに入れ子表示（何に使ったか追跡）
+          var its=catItems[s.sk];
+          if(its && its.length){
+            breakHtml+='<div class="itemlist">';
+            its.forEach(function(it){ breakHtml+='<div class="itemrow"><span class="il">'+escapeHtml(it.name)+'</span><span class="iv">'+yen(it.v)+'</span></div>'; });
+            breakHtml+='</div>';
+          }
+        });
         breakHtml+='</div>';
       }
       html+='<div class="bar-item'+(hasDetail?' clickable':'')+'" data-cat="'+escapeHtml(r.c.id)+'">'+
