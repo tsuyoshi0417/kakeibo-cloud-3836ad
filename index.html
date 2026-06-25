@@ -100,6 +100,11 @@
   .help{font-size:12px;color:var(--ink-sub);margin-top:4px;}
   .warn-flag{display:inline-block;background:#fbf3e0;color:var(--warn);font-weight:700;font-size:12px;padding:2px 7px;border-radius:8px;white-space:nowrap;}
   .warn-note{font-size:12px;color:var(--warn);background:#fbf3e0;border-radius:8px;padding:7px 10px;margin-top:6px;}
+  .qty-in{display:flex;align-items:center;gap:5px;margin-top:6px;flex-wrap:nowrap;}
+  .qty-in input{width:64px;padding:6px 8px;font-size:14px;border:1.5px solid var(--line);border-radius:8px;text-align:right;}
+  .qty-in .qu{font-size:13px;color:var(--ink-sub);}
+  .qty-in button{border:none;background:var(--teal);color:#fff;font-size:13px;font-weight:700;padding:7px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;}
+  .qty-in button:active{background:var(--teal-dark);}
   .mirror-card{background:transparent;box-shadow:none;border:1px solid var(--line);border-left:3px solid var(--line);padding:14px 16px;}
   .mirror-card .sec-title{color:var(--ink-sub);font-size:12px;font-weight:600;letter-spacing:0;}
   .mirror-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;}
@@ -1282,7 +1287,15 @@
           var isBest=!it.qtyUnknown&&!it.saleLimited&&it.unitPrice===best&&isFinite(best);
           // 今いる店モード：その店の行を太字でハイライト（新色なし＝太字のみ）。
           var hereHi=(hereStore && it.store===hereStore);
-          var qtyCell=it.qtyUnknown?'<span class="warn-flag">内容量待ち</span>':escapeHtml(String(it.qty))+UNIT_LABEL[it.unit];
+          // 内容量待ちの品には、その場で内容量を入れる小UIを出す（数字パッド・中立ラベル）。
+          var qtyCell;
+          if(it.qtyUnknown){
+            var uLabel=UNIT_LABEL[it.unit]||"g";
+            qtyCell='<span class="warn-flag">内容量待ち</span>'+
+              '<div class="qty-in"><input type="number" inputmode="numeric" min="0" placeholder="内容量" data-qtid="'+it.id+'">'+
+              '<span class="qu">'+uLabel+'</span>'+
+              '<button data-qtid="'+it.id+'">入れる</button></div>';
+          }else{ qtyCell=escapeHtml(String(it.qty))+UNIT_LABEL[it.unit]; }
           // 価格セル：割引品は「あなた¥X／一般推定¥Y」、通常品は ¥price
           var priceCell;
           if(it.memberPrice){
@@ -1314,6 +1327,27 @@
           DB.prices=DB.prices.filter(function(p){return p.id!==id;});
           save(); renderCompare(); toast("削除しました");
         });
+      }
+      // 内容量待ちの品に、その場で内容量(qty)を入れる。対象は price の id で特定（店ごとの1行）。
+      function applyQty(id){
+        var inp=box.querySelector('.qty-in input[data-qtid="'+id+'"]');
+        if(!inp) return;
+        var raw=(inp.value||"").trim();
+        var n=Number(raw);
+        if(raw==="" || !isFinite(n) || n<=0){ toast("内容量は数字で入れてください"); return; }
+        var p=null;
+        for(var j=0;j<DB.prices.length;j++){ if(DB.prices[j].id===id){ p=DB.prices[j]; break; } }
+        if(!p){ return; }
+        p.qty=n; p.qtyUnknown=false;
+        save(); renderCompare(); toast("内容量を入れました ✓");
+      }
+      var qbtns=box.querySelectorAll('.qty-in button[data-qtid]');
+      for(var b=0;b<qbtns.length;b++){
+        qbtns[b].addEventListener("click", function(){ applyQty(this.getAttribute("data-qtid")); });
+      }
+      var qins=box.querySelectorAll('.qty-in input[data-qtid]');
+      for(var c=0;c<qins.length;c++){
+        qins[c].addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); applyQty(this.getAttribute("data-qtid")); } });
       }
     }
     var sel=$("vProd"); sel.innerHTML="";
