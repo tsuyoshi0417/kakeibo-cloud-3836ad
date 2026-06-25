@@ -736,6 +736,10 @@
         p.note = (typeof p.note==="string") ? p.note : "";
         // groupId は後方互換：名寄せ用の任意キー。文字列のみ採用、無ければ空（＝従来どおり name 単位でグループ化）。
         p.groupId = (typeof p.groupId==="string") ? p.groupId : "";
+        // recheckDays は後方互換：相場が変わる品（鶏もも/魚/野菜等）に Claude が手で打つ任意の数値。
+        // typeof===number かつ >0 のみ採用＝無ければキーごと削除（無印＝そろそろ確認の対象外＝誤検知ゼロ）。
+        if(typeof p.recheckDays==="number" && isFinite(p.recheckDays) && p.recheckDays>0){ p.recheckDays=Math.round(p.recheckDays); }
+        else{ delete p.recheckDays; }
       });
       // --- 目標エンジン：欠損は既定で吸収（SCHEMA_VERSION据え置き） ---
       d.goal = normalizeGoal(d.goal);
@@ -1338,6 +1342,15 @@
     var m=/^\d{4}-(\d{2})-(\d{2})$/.exec(d||""); if(!m) return "";
     return Number(m[1])+"月"+Number(m[2])+"日";
   }
+  // 経過日数：記録日(YYYY-MM-DD)から今日までの日数。正の整数のみ、不正/未来は -1（=判定対象外）。
+  function daysSince(d){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d||"")) return -1;
+    var p=d.split("-"), then=new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));
+    if(isNaN(then.getTime())) return -1;
+    var t=todayStr().split("-"), now=new Date(Number(t[0]),Number(t[1])-1,Number(t[2]));
+    var diff=Math.floor((now-then)/86400000);
+    return diff>=0 ? diff : -1;
+  }
   // 検索語・選んだ店は localStorage に保持。
   var CMP_SEARCH_KEY="kakeibo_cmp_search_v1", CMP_STORE_KEY="kakeibo_cmp_store_v1";
   function getCmpStore(){ try{ return localStorage.getItem(CMP_STORE_KEY)||""; }catch(e){ return ""; } }
@@ -1442,6 +1455,13 @@
           if(it.memberPrice){
             priceCell='<span class="muted small">あなた</span><b>'+yen(it.price)+'</b> <span class="muted small">一般推定 '+yen(Math.round(it.cmpPrice))+'</span>';
           }else{ priceCell='<b>'+yen(it.price)+'</b>'; }
+          // 値段をなおす：内容量「なおす」と同じ手触り。確定で price 更新＋date を今日にセット（=そろそろ確認のタイマーがリセット）。
+          var priceEdit=' <button type="button" class="qty-edit-btn" data-priceeditid="'+it.id+'">値段をなおす</button>'+
+            '<div class="qty-in price-edit" data-priceeditid="'+it.id+'" style="display:none;">'+
+            '<input type="number" inputmode="numeric" min="0" value="'+escapeHtml(String(it.price))+'" data-prid="'+it.id+'">'+
+            '<span class="qu">円</span>'+
+            '<button type="button" data-prid="'+it.id+'">確定</button>'+
+            '<button type="button" class="qty-cancel price-cancel" data-priceeditid="'+it.id+'">やめる</button></div>';
           // 単価（カード右上の主役）：qtyUnknown は単価を出せないが「記録あり」を事実として見せる。
           var unitCell;
           if(it.qtyUnknown){
@@ -1450,6 +1470,14 @@
           var dl=it.qtyUnknown?cmpDateLabel(it.date):"";
           // 割引は店名の下に中立タグ（既存 warn-flag スタイルを流用＝新色なし）。半額・見切り・特売を包む中立語。
           var saleTag=it.saleLimited?'<span class="warn-flag">割引'+(it.note?'（'+escapeHtml(it.note)+'）':'')+'</span>':'';
+          // そろそろ確認：相場が月単位で変わる品(recheckDays>0)で、date があり、経過日数 >= recheckDays のとき。
+          // 中立トーン＝煽らず「見かけたら確認してね」程度。recheckDays 無し/経過が満たない品は何も出さない（誤検知ゼロ）。
+          var recheckTag="";
+          if(typeof it.recheckDays==="number" && it.recheckDays>0){
+            var ds=daysSince(it.date);
+            if(ds>=it.recheckDays){ recheckTag='<span class="warn-flag">🔄 そろそろ確認（'+ds+'日前）</span>'; }
+          }
+          var tagsHtml=saleTag+recheckTag;
           // 割引トグル（"鏡が狂わないよう掃除する消しゴム"＝控えめ・後ろ向き／内容量の行とは分離）。
           var saleToggle='<div class="sale-toggle'+(it.saleLimited?' on':'')+'" data-saleid="'+it.id+'" role="button">'+
             '<span class="sbox">'+(it.saleLimited?'✓':'')+'</span>'+
@@ -1459,9 +1487,9 @@
               '<span class="sr-store">'+escapeHtml(it.store||"―")+'</span>'+
               '<span class="sr-unit">'+unitCell+(isBest?' <span class="best">最安</span>':'')+'</span>'+
             '</div>'+
-            (saleTag?'<div class="sr-tags">'+saleTag+'</div>':'')+
+            (tagsHtml?'<div class="sr-tags">'+tagsHtml+'</div>':'')+
             '<div class="sr-meta"><span class="sr-price">'+priceCell+'</span>'+(dl?' <span class="muted small">'+dl+'</span>':'')+'</div>'+
-            '<div class="sr-actions">'+qtyCell+'<button class="del" data-pid="'+it.id+'">× 削除</button></div>'+
+            '<div class="sr-actions">'+qtyCell+priceEdit+'<button class="del" data-pid="'+it.id+'">× 削除</button></div>'+
             saleToggle+
           '</div>';
         });
@@ -1521,6 +1549,43 @@
       var cbtns=box.querySelectorAll('.qty-cancel[data-editid]');
       for(var e2=0;e2<cbtns.length;e2++){
         cbtns[e2].addEventListener("click", function(){ toggleEdit(this.getAttribute("data-editid"), false); });
+      }
+      // 値段をなおす：内容量「なおす」と同じ手触り。確定で price を更新し date を今日にセット（=そろそろ確認がリセット）。
+      // v0は上書き（履歴は残さない）。0/空はガード（applyQty と同じ流儀）。cmpPrice/unitPrice は再描画で再計算。
+      function applyPrice(id){
+        var inp=box.querySelector('.price-edit[data-priceeditid="'+id+'"] input[data-prid="'+id+'"]');
+        if(!inp) return;
+        var raw=(inp.value||"").trim();
+        var n=Number(raw);
+        if(raw==="" || !isFinite(n) || n<=0){ toast("値段は数字で入れてください"); return; }
+        var p=null;
+        for(var j=0;j<DB.prices.length;j++){ if(DB.prices[j].id===id){ p=DB.prices[j]; break; } }
+        if(!p) return;
+        p.price=Math.round(n); p.date=todayStr();
+        save(); renderCompare(); toast("値段をなおしました ✓");
+      }
+      function togglePriceEdit(id, open){
+        var ed=box.querySelector('.price-edit[data-priceeditid="'+id+'"]'); if(!ed) return;
+        var btn=box.querySelector('.qty-edit-btn[data-priceeditid="'+id+'"]');
+        ed.style.display=open?"flex":"none";
+        if(btn) btn.style.display=open?"none":"inline-block";
+        if(open){ var f=ed.querySelector('input[data-prid]'); if(f){ f.focus(); f.select&&f.select(); } }
+      }
+      var pebtns=box.querySelectorAll('.qty-edit-btn[data-priceeditid]');
+      for(var e4=0;e4<pebtns.length;e4++){
+        pebtns[e4].addEventListener("click", function(){ togglePriceEdit(this.getAttribute("data-priceeditid"), true); });
+      }
+      var pcbtns=box.querySelectorAll('.price-cancel[data-priceeditid]');
+      for(var e5=0;e5<pcbtns.length;e5++){
+        pcbtns[e5].addEventListener("click", function(){ togglePriceEdit(this.getAttribute("data-priceeditid"), false); });
+      }
+      var prbtns=box.querySelectorAll('.price-edit button[data-prid]');
+      for(var e6=0;e6<prbtns.length;e6++){
+        prbtns[e6].addEventListener("click", function(){ applyPrice(this.getAttribute("data-prid")); });
+      }
+      var prins=box.querySelectorAll('.price-edit input[data-prid]');
+      for(var e7=0;e7<prins.length;e7++){
+        prins[e7].addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); applyPrice(this.getAttribute("data-prid")); } });
       }
       // 特売トグル：saleLimited を ON/OFF（既定オフ・1タップで可逆・確認なし）。
       // フラグだけ＝割引種別/割引前価格は持たない。save()で /vault 同期＝往復で消えない。
