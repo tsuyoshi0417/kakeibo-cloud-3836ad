@@ -882,10 +882,8 @@
   function syncTimeStr(ms){
     if(!ms || typeof ms!=="number") return "";
     var d=new Date(ms), p=function(n){return String(n).padStart(2,"0");};
-    var hm=p(d.getHours())+":"+p(d.getMinutes());
-    var now=new Date();
-    var sameDay=(d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth() && d.getDate()===now.getDate());
-    return sameDay ? hm : ((d.getMonth()+1)+"/"+d.getDate()+" "+hm);
+    // 年・月・日・時刻をいつも出す（例 2026/6/27 14:03）
+    return d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate()+" "+p(d.getHours())+":"+p(d.getMinutes());
   }
   // 同期済みの表示文言。updatedAtがあれば「✓ 同期済み（最終更新 …）」、無ければ「✓ 同期済み」だけ（version番号は画面に出さない）。
   function syncedLabel(){
