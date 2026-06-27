@@ -318,6 +318,8 @@
       <div class="chips" id="catChips"></div>
       <label>金額（円）</label>
       <input type="number" id="inAmount" inputmode="numeric" placeholder="例：480" min="0">
+      <label>品名（何を買った・任意）</label>
+      <input type="text" id="inItem" placeholder="例：大根、ロイヤルブレッド">
       <label>店（任意）</label>
       <input list="storeList" id="inStore" placeholder="選ぶ or 入力">
       <datalist id="storeList"></datalist>
@@ -1191,12 +1193,18 @@
         else{ var sc=subById[sk]; subRows.push({name:sc?sc.name:"不明",icon:sc?sc.icon:"❓",v:subs[sk],sk:sk}); }
       });
       subRows.sort(function(a,b){ return b.v-a.v; });
-      var hasDetail=subRows.length>1||(subRows.length===1&&!subRows[0].none);
+      // 細分類が1つ以上ある／または「細分類なし(_none)」でも品名(手入力items)が付いていれば展開を出す。
+      // 手入力の品名はsubId空＝_noneに入るので、品名がある時はその費目直下に出して何を買ったか残す。
+      var noneHasItems=catItems["_none"]&&catItems["_none"].length;
+      var hasDetail=subRows.length>1||(subRows.length===1&&!subRows[0].none)||(subRows.length>=1&&noneHasItems);
       var breakHtml="";
       if(hasDetail){
         breakHtml='<div class="subbreak">';
         subRows.forEach(function(s){
-          breakHtml+='<div class="subrow"><span class="sl">'+escapeHtml(s.icon)+" "+escapeHtml(s.name)+'</span><span class="sv">'+yen(s.v)+'</span></div>';
+          // 細分類なし(_none)の行は、品名が無ければ見出しを出さない（従来どおり静かに）。品名があれば品名だけ費目直下に出す。
+          if(!s.none){
+            breakHtml+='<div class="subrow"><span class="sl">'+escapeHtml(s.icon)+" "+escapeHtml(s.name)+'</span><span class="sv">'+yen(s.v)+'</span></div>';
+          }
           // その細分類に品名(items[])があれば「品名 ¥金額」を控えめに入れ子表示（何に使ったか追跡）
           var its=catItems[s.sk];
           if(its && its.length){
@@ -1287,10 +1295,15 @@
     if(!selectedCat){ toast("費目を選んでください"); return; }
     if(!amount||amount<=0){ toast("金額を入れてください"); return; }
     var store=$("inStore").value.trim();
-    DB.expenses.push({id:uid(),date:date,catId:selectedCat,amount:amount,store:store});
+    var itemName=$("inItem").value.trim();
+    var exp={id:uid(),date:date,catId:selectedCat,amount:amount,store:store};
+    // 品名が入っていれば単一item（金額=全額・費目=選択した費目・subIdは空＝Claudeが後でレシートで打つ）。
+    // 空なら従来どおりitemsを付けない（後方互換）。
+    if(itemName){ exp.items=[{name:itemName, amount:amount, catId:selectedCat, subId:""}]; }
+    DB.expenses.push(exp);
     if(store && !DB.stores.some(function(s){return s.name===store;})) DB.stores.push({name:store,km:0,fare:0});
     save();
-    $("inAmount").value=""; $("inStore").value="";
+    $("inAmount").value=""; $("inItem").value=""; $("inStore").value="";
     refreshStoreDatalists(); renderRecent();
     toast(addedToast(selectedCat));
   });
