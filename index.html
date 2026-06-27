@@ -113,6 +113,10 @@
   .qty-in select.qty-unit{padding:6px 6px;font-size:13px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);}
   .qty-in button.qty-cancel{background:#fff;color:var(--ink-sub);border:1.5px solid var(--line);}
   .qty-in button.qty-cancel:active{background:var(--line);}
+  /* 店をなおす：要素が多いので窮屈なら折り返す。店名セレクト/新店入力は横長・左寄せ（数値欄の右寄せ・固定幅を上書き）。 */
+  .qty-in.store-edit{flex-wrap:wrap;}
+  .qty-in select.store-sel{padding:6px 6px;font-size:13px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);max-width:160px;}
+  .qty-in input.store-new{width:auto;flex:1 1 120px;min-width:110px;text-align:left;}
   .qty-edit-btn{background:none;border:none;color:var(--ink-sub);font-size:11px;font-weight:600;cursor:pointer;padding:0 2px;text-decoration:underline;}
   /* ===== 価格比較：店ごとの行（モバイル最優先＝縦に積む。店名は横書き1行）===== */
   .cmp-group{margin-bottom:18px;}
@@ -1323,6 +1327,19 @@
       return '<option value="'+u+'"'+(u===selUnit?' selected':'')+'>'+UNIT_LABEL[u]+'</option>';
     }).join("");
   }
+  // 「店をなおす」用のセレクト options。既存店（DB.stores の name）を並べ、現在の store を選択状態に（打たず選ぶ）。
+  // 現在の store が店マスタに無い場合も先頭に出して選択済みにする（取りこぼし防止）。末尾に sentinel「＋ 新しい店を入力」。
+  var NEW_STORE_SENTINEL="__newstore__";
+  function storeOptionsHtml(cur){
+    cur=cur||"";
+    var names=(DB.stores||[]).map(function(s){return s.name;});
+    if(cur && names.indexOf(cur)<0) names.unshift(cur);  // 未登録の現店も選べるように先頭へ
+    var html=names.map(function(n){
+      return '<option value="'+escapeHtml(n)+'"'+(n===cur?' selected':'')+'>'+escapeHtml(n)+'</option>';
+    }).join("");
+    html+='<option value="'+NEW_STORE_SENTINEL+'">＋ 新しい店を入力</option>';
+    return html;
+  }
   // 登録者割引（サニー食品のみ・酒/非サニーは対象外＝定価）。8%は仮定＝「推定・目安」と明示し断定しない。
   var MEMBER_DISCOUNT=0.08;
   // フラグ付き品の「一般客の推定店頭価格」＝割引価格 ÷ 0.92（割引を戻した目安）。
@@ -1462,6 +1479,14 @@
             '<span class="qu">円</span>'+
             '<button type="button" data-prid="'+it.id+'">確定</button>'+
             '<button type="button" class="qty-cancel price-cancel" data-priceeditid="'+it.id+'">やめる</button></div>';
+          // 店をなおす：内容量/値段「なおす」と同じ手触り。既存店から選ぶ（打たず選ぶ）＋末尾に「新しい店を入力」。
+          // 確定で store を更新＝その商品が選んだ店のグループに移動。空はガード。store は自由文字列（店マスタ未登録でも比較は名前で出る）。
+          var storeEdit=' <button type="button" class="qty-edit-btn" data-storeeditid="'+it.id+'">店をなおす</button>'+
+            '<div class="qty-in store-edit" data-storeeditid="'+it.id+'" style="display:none;">'+
+            '<select class="store-sel" data-stid="'+it.id+'">'+storeOptionsHtml(it.store)+'</select>'+
+            '<input type="text" class="store-new" data-stid="'+it.id+'" placeholder="新しい店名" style="display:none;">'+
+            '<button type="button" data-stid="'+it.id+'">確定</button>'+
+            '<button type="button" class="qty-cancel store-cancel" data-storeeditid="'+it.id+'">やめる</button></div>';
           // 単価（カード右上の主役）：qtyUnknown は単価を出せないが「記録あり」を事実として見せる。
           var unitCell;
           if(it.qtyUnknown){
@@ -1489,7 +1514,7 @@
             '</div>'+
             (tagsHtml?'<div class="sr-tags">'+tagsHtml+'</div>':'')+
             '<div class="sr-meta"><span class="sr-price">'+priceCell+'</span>'+(dl?' <span class="muted small">'+dl+'</span>':'')+'</div>'+
-            '<div class="sr-actions">'+qtyCell+priceEdit+'<button class="del" data-pid="'+it.id+'">× 削除</button></div>'+
+            '<div class="sr-actions">'+qtyCell+priceEdit+storeEdit+'<button class="del" data-pid="'+it.id+'">× 削除</button></div>'+
             saleToggle+
           '</div>';
         });
@@ -1586,6 +1611,58 @@
       var prins=box.querySelectorAll('.price-edit input[data-prid]');
       for(var e7=0;e7<prins.length;e7++){
         prins[e7].addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); applyPrice(this.getAttribute("data-prid")); } });
+      }
+      // 店をなおす：内容量/値段「なおす」と同じ手触り。既存店をセレクトで選ぶ／末尾の sentinel で新店名を打てる。
+      // 確定で store を更新→save()（/vault同期）→再描画でその商品が新しい店のグループへ移動。空店名はガード（変更しない）。
+      // 新店名を入れて店マスタに無ければ {name,km:null,fare:0} で追加（重複防止）＝交通費未登録でも価格比較は名前で表示される。
+      function applyStore(id){
+        var sel=box.querySelector('.store-edit[data-storeeditid="'+id+'"] select[data-stid="'+id+'"]');
+        var nin=box.querySelector('.store-edit[data-storeeditid="'+id+'"] input[data-stid="'+id+'"]');
+        if(!sel) return;
+        var val;
+        if(sel.value===NEW_STORE_SENTINEL){ val=(nin&&nin.value||"").trim(); }
+        else { val=(sel.value||"").trim(); }
+        if(!val){ toast("店名を入れてください"); return; }
+        var p=null;
+        for(var j=0;j<DB.prices.length;j++){ if(DB.prices[j].id===id){ p=DB.prices[j]; break; } }
+        if(!p) return;
+        // 新店名で店マスタに無ければ追加（重複防止）。km は未登録＝null（交通費比較には出ないだけ）。
+        if(!(DB.stores||[]).some(function(s){return s.name===val;})){ DB.stores.push({name:val,km:null,fare:0}); }
+        p.store=val;
+        save(); renderCompare(); toast("店をなおしました ✓");
+      }
+      function toggleStoreEdit(id, open){
+        var ed=box.querySelector('.store-edit[data-storeeditid="'+id+'"]'); if(!ed) return;
+        var btn=box.querySelector('.qty-edit-btn[data-storeeditid="'+id+'"]');
+        ed.style.display=open?"flex":"none";
+        if(btn) btn.style.display=open?"none":"inline-block";
+      }
+      var sebtns=box.querySelectorAll('.qty-edit-btn[data-storeeditid]');
+      for(var e8=0;e8<sebtns.length;e8++){
+        sebtns[e8].addEventListener("click", function(){ toggleStoreEdit(this.getAttribute("data-storeeditid"), true); });
+      }
+      var sccbtns=box.querySelectorAll('.store-cancel[data-storeeditid]');
+      for(var e9=0;e9<sccbtns.length;e9++){
+        sccbtns[e9].addEventListener("click", function(){ toggleStoreEdit(this.getAttribute("data-storeeditid"), false); });
+      }
+      // セレクトで「＋ 新しい店を入力」を選んだら新店名のテキスト欄を出す（それ以外は隠す）。
+      var ssels=box.querySelectorAll('.store-edit select[data-stid]');
+      for(var e10=0;e10<ssels.length;e10++){
+        ssels[e10].addEventListener("change", function(){
+          var id=this.getAttribute("data-stid");
+          var nin=box.querySelector('.store-edit[data-storeeditid="'+id+'"] input[data-stid="'+id+'"]');
+          if(!nin) return;
+          if(this.value===NEW_STORE_SENTINEL){ nin.style.display="inline-block"; nin.focus(); }
+          else { nin.style.display="none"; }
+        });
+      }
+      var sabtns=box.querySelectorAll('.store-edit button[data-stid]');
+      for(var e11=0;e11<sabtns.length;e11++){
+        sabtns[e11].addEventListener("click", function(){ applyStore(this.getAttribute("data-stid")); });
+      }
+      var sains=box.querySelectorAll('.store-edit input[data-stid]');
+      for(var e12=0;e12<sains.length;e12++){
+        sains[e12].addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); applyStore(this.getAttribute("data-stid")); } });
       }
       // 特売トグル：saleLimited を ON/OFF（既定オフ・1タップで可逆・確認なし）。
       // フラグだけ＝割引種別/割引前価格は持たない。save()で /vault 同期＝往復で消えない。
