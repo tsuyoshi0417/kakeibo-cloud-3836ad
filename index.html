@@ -11,6 +11,7 @@
     --bg:#f4f1e8; --card:#ffffff; --ink:#2c2a26; --ink-sub:#6b6459;
     --teal:#427e89; --teal-dark:#356670; --gold:#a98b3c; --line:#e3ddcf;
     --danger:#b3503f; --ok:#3f7d52; --warn:#c08a2d;
+    --ok-soft:#e9f1ec; --tax-out:#6a5a8c; --tax-out-soft:#efebf5;
     --shadow:0 2px 8px rgba(44,42,38,.08); --radius:14px;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -148,6 +149,19 @@
   .sale-toggle.on .sbox{background:var(--warn);border-color:var(--warn);}
   .sale-toggle .stx{font-size:13px;color:var(--ink-sub);line-height:1.35;}
   .sale-toggle .stx b{font-weight:700;color:var(--ink);}
+  /* 税のピル（金額/価格ラベルの右に小さく明記）。税込＝緑薄塗り・税抜＝紫薄塗り。 */
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:7px;vertical-align:middle;letter-spacing:0;}
+  .pill.tax-in{background:var(--ok-soft);color:var(--ok);}
+  .pill.tax-out{background:var(--tax-out-soft);color:var(--tax-out);}
+  label .lbl-sub{font-weight:500;color:var(--ink-sub);font-size:11px;margin-left:6px;}
+  /* 割引・社割トグルの畳みリンク（地味・既定は閉じる／毎日の3タップを邪魔しない） */
+  .disc-link{display:inline-flex;align-items:center;gap:5px;margin-top:10px;color:var(--ink-sub);font-size:13px;font-weight:600;cursor:pointer;background:none;border:none;padding:6px 0;-webkit-tap-highlight-color:transparent;}
+  .disc-link .caret{font-size:11px;transition:transform .15s;}
+  .disc-link.open .caret{transform:rotate(180deg);}
+  .disc-body{display:none;}
+  .disc-body.open{display:block;}
+  /* 最近の支出の中立タグ（割引/社割）＝warn-flag流用・煽りなし */
+  .item .mid .t .e-tag{display:inline-block;background:#fbf3e0;color:var(--warn);font-weight:700;font-size:11px;padding:1px 7px;border-radius:8px;margin-left:6px;vertical-align:middle;}
   .mirror-card{background:transparent;box-shadow:none;border:1px solid var(--line);border-left:3px solid var(--line);padding:14px 16px;}
   .mirror-card .sec-title{color:var(--ink-sub);font-size:12px;font-weight:600;letter-spacing:0;}
   .mirror-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;}
@@ -326,8 +340,8 @@
       <input type="date" id="inDate">
       <label>費目</label>
       <div class="chips" id="catChips"></div>
-      <label>金額（円）</label>
-      <input type="number" id="inAmount" inputmode="numeric" placeholder="例：480" min="0">
+      <label>金額（円）<span class="pill tax-in">税込</span></label>
+      <input type="number" id="inAmount" inputmode="numeric" placeholder="例：480（税込）" min="0">
       <label>品名（何を買った・任意）</label>
       <p class="help">買った品を1つずつ入れると、上の金額は明細の合計が自動で入ります。明細を使わない時は上の金額だけでもOK。</p>
       <div id="detRows"></div>
@@ -336,6 +350,17 @@
       <label>店（任意）</label>
       <input list="storeList" id="inStore" placeholder="選ぶ or 入力">
       <datalist id="storeList"></datalist>
+      <button type="button" class="disc-link" id="discToggleLink" aria-expanded="false">🏷 割引・社割で買った <span class="caret">▾</span></button>
+      <div class="disc-body" id="discBody">
+        <div class="sale-toggle" id="discSaleToggle" data-on="0" role="button" tabindex="0" aria-pressed="false">
+          <span class="sbox"></span>
+          <span class="stx"><b>安く買えた</b>（半額・見切り・特売）</span>
+        </div>
+        <div class="sale-toggle" id="discMemberToggle" data-on="0" role="button" tabindex="0" aria-pressed="false">
+          <span class="sbox"></span>
+          <span class="stx"><b>社割で買った</b>（社員価格）</span>
+        </div>
+      </div>
       <div style="height:14px;"></div>
       <button class="btn" id="addBtn">＋ 追加する</button>
     </div>
@@ -357,7 +382,7 @@
       <input list="storeList2" id="pStore" placeholder="選ぶ or 入力">
       <datalist id="storeList2"></datalist>
       <div class="row">
-        <div><label>価格（円）</label><input type="number" id="pPrice" inputmode="numeric" placeholder="298" min="0"></div>
+        <div><label>価格（円）<span class="pill tax-out">税抜</span><span class="lbl-sub">棚の本体価格</span></label><input type="number" id="pPrice" inputmode="numeric" placeholder="298" min="0"></div>
         <div><label>内容量（不明なら空欄）</label><input type="number" id="pQty" inputmode="decimal" placeholder="250／不明は空欄" min="0"></div>
       </div>
       <label>単位</label>
@@ -376,6 +401,7 @@
     </div>
     <div class="card">
       <h3 class="sec-title">商品ごとの単価くらべ</h3>
+      <p class="help" style="margin-top:0;margin-bottom:8px;">単価は税抜・本体価格で比較しています。</p>
       <input id="cmpSearch" placeholder="商品名でさがす" autocomplete="off">
       <label style="margin-top:10px;">今いる店</label>
       <select id="cmpStore"></select>
@@ -740,6 +766,9 @@
       var subMap={}; d.subcats.forEach(function(sc){ subMap[sc.id]=sc; });
       d.expenses.forEach(function(e){
         if(e.subId){ var sc=subMap[e.subId]; if(sc&&sc.parent) e.catId=sc.parent; }
+        // 支出の割引/社割は後方互換：true のみ採用（無印＝通常）。金額計算には使わない＝印のみ。
+        if(e.saleLimited===true){ e.saleLimited=true; } else { delete e.saleLimited; }
+        if(e.memberPrice===true){ e.memberPrice=true; } else { delete e.memberPrice; }
       });
       d.prices.forEach(function(p){
         if(p.qty===null||p.qty===undefined||p.qty===""){ p.qty=null; }
@@ -1335,6 +1364,40 @@
     $("detSum").style.display="none";
   }
   $("detAddBtn").addEventListener("click", function(){ detAddRow(); detSync(); });
+  // ── 割引・社割トグル（畳み式・既定は閉じる＆OFF）──────────────
+  // 普段は視界に入らない＝毎日の費目→金額→追加の3タップを邪魔しない（妻指示）。
+  function discSet(el,on){
+    el.setAttribute("data-on", on?"1":"0");
+    el.classList.toggle("on", !!on);
+    el.setAttribute("aria-pressed", on?"true":"false");
+    el.querySelector(".sbox").textContent = on?"✓":"";
+  }
+  function discGet(id){ return $(id).getAttribute("data-on")==="1"; }
+  function discCollapse(){
+    $("discBody").classList.remove("open");
+    $("discToggleLink").classList.remove("open");
+    $("discToggleLink").setAttribute("aria-expanded","false");
+  }
+  // 追加成功後＝2トグルOFF＋畳み戻し（次の入力に持ち越さない）
+  function discReset(){
+    discSet($("discSaleToggle"), false);
+    discSet($("discMemberToggle"), false);
+    discCollapse();
+  }
+  $("discToggleLink").addEventListener("click", function(){
+    var open=$("discBody").classList.toggle("open");
+    $("discToggleLink").classList.toggle("open", open);
+    this.setAttribute("aria-expanded", open?"true":"false");
+  });
+  (function(){
+    var st=$("discSaleToggle"), mt=$("discMemberToggle");
+    function bind(el){
+      function flip(){ discSet(el, !(el.getAttribute("data-on")==="1")); }
+      el.addEventListener("click", flip);
+      el.addEventListener("keydown", function(ev){ if(ev.key===" "||ev.key==="Enter"){ ev.preventDefault(); flip(); } });
+    }
+    bind(st); bind(mt);
+  })();
   // 費目チップを直近の使用頻度が高い順に（同頻度・履歴なしは既定順のまま＝安定ソート）。表示順のみ・id/データは不変。
   function orderedCats(){
     var freq={};
@@ -1357,8 +1420,9 @@
     list.forEach(function(e){
       var c=catById(e.catId);
       var sub=e.date.slice(5).replace("-","/")+(e.store?(" ・ "+escapeHtml(e.store)):"");
+      var tags=(e.saleLimited?'<span class="e-tag">割引</span>':'')+(e.memberPrice?'<span class="e-tag">社割</span>':'');
       html+='<div class="item"><div class="ic">'+escapeHtml(c.icon)+'</div>'+
-            '<div class="mid"><div class="t">'+escapeHtml(c.name)+'</div><div class="muted small">'+sub+'</div></div>'+
+            '<div class="mid"><div class="t">'+escapeHtml(c.name)+tags+'</div><div class="muted small">'+sub+'</div></div>'+
             '<div class="amt">'+yen(e.amount)+'</div><button class="del" data-id="'+e.id+'">削除</button></div>';
     });
     box.innerHTML=html;
@@ -1378,6 +1442,9 @@
     var rows=detReadRows();
     var inUse=rows.some(function(r){ return r.name!=="" || r.amtRaw!==""; });
     var exp={id:uid(),date:date,catId:selectedCat,amount:0,store:store};
+    // 割引/社割は印のみ（true のみ付与・金額計算には使わない）。OFF時はキーを付けない＝後方互換。
+    if(discGet("discSaleToggle")) exp.saleLimited=true;
+    if(discGet("discMemberToggle")) exp.memberPrice=true;
 
     if(inUse){
       // ── 明細モード：各行 品名＋金額の両方必須・金額>0 ──
@@ -1408,6 +1475,7 @@
     // フォームクリア（日付以外：金額・明細行・店）。費目選択は維持しつつ明細だけ空1行へ。
     $("inAmount").value=""; $("inStore").value="";
     detReset();
+    discReset();
     refreshStoreDatalists(); renderRecent();
     toast(addedToast(selectedCat));
   });
