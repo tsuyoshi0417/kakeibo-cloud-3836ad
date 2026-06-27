@@ -103,6 +103,16 @@
   details{margin-top:6px;}
   summary{cursor:pointer;color:var(--teal);font-weight:600;font-size:14px;padding:6px 0;}
   .help{font-size:12px;color:var(--ink-sub);margin-top:4px;}
+  /* 明細入力（品名＋金額の動的行） */
+  .det-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
+  .det-row input.det-name{flex:1 1 auto;min-width:0;}
+  .det-row input.det-amt{flex:0 0 100px;width:100px;text-align:right;}
+  .det-row button.det-del{flex:0 0 auto;border:1.5px solid var(--line);background:#fff;color:var(--ink-sub);font-size:18px;font-weight:700;width:44px;height:48px;border-radius:12px;cursor:pointer;line-height:1;padding:0;}
+  .det-row button.det-del:active{background:var(--line);}
+  .det-add{display:block;width:100%;border:1.5px dashed var(--teal);background:#fff;color:var(--teal);font-size:15px;font-weight:700;padding:11px;border-radius:12px;cursor:pointer;margin-top:10px;}
+  .det-add:active{background:var(--bg);}
+  .det-sum{font-size:13px;color:var(--teal);font-weight:700;margin-top:8px;}
+  input[readonly]{background:var(--bg);color:var(--ink-sub);}
   .warn-flag{display:inline-block;background:#fbf3e0;color:var(--warn);font-weight:700;font-size:12px;padding:2px 7px;border-radius:8px;white-space:nowrap;}
   .warn-note{font-size:12px;color:var(--warn);background:#fbf3e0;border-radius:8px;padding:7px 10px;margin-top:6px;}
   .qty-in{display:flex;align-items:center;gap:5px;margin-top:6px;flex-wrap:nowrap;}
@@ -319,7 +329,10 @@
       <label>金額（円）</label>
       <input type="number" id="inAmount" inputmode="numeric" placeholder="例：480" min="0">
       <label>品名（何を買った・任意）</label>
-      <input type="text" id="inItem" placeholder="例：大根、ロイヤルブレッド">
+      <p class="help">買った品を1つずつ入れると、上の金額は明細の合計が自動で入ります。明細を使わない時は上の金額だけでもOK。</p>
+      <div id="detRows"></div>
+      <button type="button" class="det-add" id="detAddBtn">＋ 品目を追加</button>
+      <div id="detSum" class="det-sum" style="display:none;"></div>
       <label>店（任意）</label>
       <input list="storeList" id="inStore" placeholder="選ぶ or 入力">
       <datalist id="storeList"></datalist>
@@ -1251,8 +1264,77 @@
     });
     if(!selectedCat && DB.cats[0]) selectedCat=DB.cats[0].id;
     refreshStoreDatalists();
+    if(!$("detRows").children.length) detAddRow(); // 初回＝空1行を置く
+    detSync();
     renderRecent();
   }
+  // ── 明細入力（品名＋金額の動的行）────────────────────────────
+  // 1行追加（空）。最低0行可（全削除しても落ちない）。
+  function detAddRow(name, amt){
+    var box=$("detRows");
+    var row=document.createElement("div"); row.className="det-row";
+    var nm=document.createElement("input");
+    nm.type="text"; nm.className="det-name"; nm.placeholder="品名（例：大根）"; nm.value=name||"";
+    var am=document.createElement("input");
+    am.type="number"; am.className="det-amt"; am.inputMode="numeric"; am.min="0"; am.placeholder="金額"; am.value=(amt!=null?amt:"");
+    var del=document.createElement("button");
+    del.type="button"; del.className="det-del"; del.textContent="✕"; del.setAttribute("aria-label","この品目を削除");
+    nm.addEventListener("input", detSync);
+    am.addEventListener("input", detSync);
+    del.addEventListener("click", function(){ box.removeChild(row); detSync(); });
+    row.appendChild(nm); row.appendChild(am); row.appendChild(del);
+    box.appendChild(row);
+  }
+  // 明細行を読む（生の入力をそのまま返す。バリデーションは追加時）
+  function detReadRows(){
+    var rows=$("detRows").querySelectorAll(".det-row");
+    var out=[];
+    for(var i=0;i<rows.length;i++){
+      var nm=rows[i].querySelector(".det-name").value.trim();
+      var av=rows[i].querySelector(".det-amt").value.trim();
+      out.push({name:nm, amtRaw:av, amt:Number(av)});
+    }
+    return out;
+  }
+  // 「明細を使っているか」＝品名か金額が1つでも入った行があるか
+  function detInUse(){
+    return detReadRows().some(function(r){ return r.name!=="" || r.amtRaw!==""; });
+  }
+  // 明細の状態に応じて 金額欄(auto/手入力)・合計表示 を同期
+  function detSync(){
+    var rows=detReadRows();
+    var inUse=rows.some(function(r){ return r.name!=="" || r.amtRaw!==""; });
+    var amtEl=$("inAmount"); var sumEl=$("detSum");
+    if(inUse){
+      // 明細使用中＝金額欄は合計autoで編集不可（不整合を構造的に消す）
+      var sum=0, ok=true;
+      rows.forEach(function(r){
+        if(r.name==="" && r.amtRaw==="") return; // 空行は無視
+        if(r.amtRaw==="" || !isFinite(r.amt) || r.amt<=0){ ok=false; }
+        else sum+=Math.round(r.amt);
+      });
+      amtEl.value = sum>0 ? String(sum) : "";
+      amtEl.readOnly=true;
+      sumEl.style.display="block";
+      sumEl.textContent = ok ? ("明細合計 "+yen(sum)+"（自動）") : "金額が未入力/不正な品目があります";
+    }else{
+      // 明細なし＝従来どおり金額手入力。
+      // 直前が明細モード（readonly＝auto値が入っていた）なら、その自動値を残さずクリア
+      // （明細を全部消した時に古い合計が手入力欄に残る不整合を防ぐ）。
+      if(amtEl.readOnly) amtEl.value="";
+      amtEl.readOnly=false;
+      sumEl.style.display="none";
+      sumEl.textContent="";
+    }
+  }
+  // 追加成功後＝明細行を空1行に戻す
+  function detReset(){
+    $("detRows").innerHTML="";
+    detAddRow();
+    $("inAmount").readOnly=false;
+    $("detSum").style.display="none";
+  }
+  $("detAddBtn").addEventListener("click", function(){ detAddRow(); detSync(); });
   // 費目チップを直近の使用頻度が高い順に（同頻度・履歴なしは既定順のまま＝安定ソート）。表示順のみ・id/データは不変。
   function orderedCats(){
     var freq={};
@@ -1290,20 +1372,42 @@
     }
   }
   $("addBtn").addEventListener("click", function(){
-    var amount=Number($("inAmount").value);
     var date=$("inDate").value||todayStr();
     if(!selectedCat){ toast("費目を選んでください"); return; }
-    if(!amount||amount<=0){ toast("金額を入れてください"); return; }
     var store=$("inStore").value.trim();
-    var itemName=$("inItem").value.trim();
-    var exp={id:uid(),date:date,catId:selectedCat,amount:amount,store:store};
-    // 品名が入っていれば単一item（金額=全額・費目=選択した費目・subIdは空＝Claudeが後でレシートで打つ）。
-    // 空なら従来どおりitemsを付けない（後方互換）。
-    if(itemName){ exp.items=[{name:itemName, amount:amount, catId:selectedCat, subId:""}]; }
+    var rows=detReadRows();
+    var inUse=rows.some(function(r){ return r.name!=="" || r.amtRaw!==""; });
+    var exp={id:uid(),date:date,catId:selectedCat,amount:0,store:store};
+
+    if(inUse){
+      // ── 明細モード：各行 品名＋金額の両方必須・金額>0 ──
+      var items=[]; var sum=0;
+      for(var i=0;i<rows.length;i++){
+        var r=rows[i];
+        if(r.name==="" && r.amtRaw==="") continue; // 完全な空行は無視（弾かない）
+        if(r.name==="" || r.amtRaw===""){ toast("品名と金額を両方入れてください"); return; }
+        if(!isFinite(r.amt) || r.amt<=0){ toast("金額は0より大きい数で入れてください"); return; }
+        var av=Math.round(r.amt);
+        items.push({name:r.name, amount:av, catId:selectedCat, subId:""});
+        sum+=av;
+      }
+      if(!items.length){ toast("品目を入れてください"); return; }
+      // 検算：items合計=exp.amount を常に保証
+      if(sum!==items.reduce(function(a,it){return a+it.amount;},0)){ toast("合計の計算に失敗しました"); return; }
+      exp.items=items; exp.amount=sum;
+    }else{
+      // ── 明細なし：従来どおり金額手入力 ──
+      var amount=Number($("inAmount").value);
+      if(!amount||amount<=0){ toast("金額を入れてください"); return; }
+      exp.amount=Math.round(amount);
+    }
+
     DB.expenses.push(exp);
     if(store && !DB.stores.some(function(s){return s.name===store;})) DB.stores.push({name:store,km:0,fare:0});
     save();
-    $("inAmount").value=""; $("inItem").value=""; $("inStore").value="";
+    // フォームクリア（日付以外：金額・明細行・店）。費目選択は維持しつつ明細だけ空1行へ。
+    $("inAmount").value=""; $("inStore").value="";
+    detReset();
     refreshStoreDatalists(); renderRecent();
     toast(addedToast(selectedCat));
   });
