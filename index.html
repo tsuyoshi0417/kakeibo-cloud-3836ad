@@ -578,7 +578,8 @@
 
   var fbApp=null, fbAuth=null, fbDb=null, fbUser=null;
   var aesKey=null;          // PINから導出した鍵（メモリ上のみ）
-  var serverVersion=0;      // 最後に読み込んだ vault の version（競合検知の基準）
+  var serverVersion=0;      // 最後に読み込んだ vault の version（競合検知の基準・内部用／画面には出さない）
+  var serverUpdatedAt=0;    // 最後に読み込んだ/保存した vault の updatedAt（ms）。画面の「最終更新」表示用
 
   // ============================================================
   //  汎用ユーティリティ
@@ -801,8 +802,9 @@
       return encryptVault(aesKey, saltCache, DB, nextVer).then(function(payload){
         return writeVaultRaw(payload).then(function(){
           serverVersion = nextVer;
+          serverUpdatedAt = Date.now();   // たった今書き込んだ時刻＝最終更新
           saving=false;
-          setSync("✓ 同期済み "+nowStr());
+          setSync(syncedLabel());
           return true;
         });
       });
@@ -876,6 +878,20 @@
     return cycleRemain(DB.catBudgets||{}, catSpentFor(cycle));
   }
   function nowStr(){ var d=new Date(),p=function(n){return String(n).padStart(2,"0");}; return p(d.getHours())+":"+p(d.getMinutes()); }
+  // updatedAt(ms)→「M/D HH:MM」（その日なら「HH:MM」だけ）。ローカル時刻。
+  function syncTimeStr(ms){
+    if(!ms || typeof ms!=="number") return "";
+    var d=new Date(ms), p=function(n){return String(n).padStart(2,"0");};
+    var hm=p(d.getHours())+":"+p(d.getMinutes());
+    var now=new Date();
+    var sameDay=(d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth() && d.getDate()===now.getDate());
+    return sameDay ? hm : ((d.getMonth()+1)+"/"+d.getDate()+" "+hm);
+  }
+  // 同期済みの表示文言。updatedAtがあれば「✓ 同期済み（最終更新 …）」、無ければ「✓ 同期済み」だけ（version番号は画面に出さない）。
+  function syncedLabel(){
+    var t=syncTimeStr(serverUpdatedAt);
+    return t ? ("✓ 同期済み（最終更新 "+t+"）") : "✓ 同期済み";
+  }
   var toastTimer;
   function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(function(){ t.classList.remove("show"); },2200); }
   function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
@@ -1778,7 +1794,7 @@
     $("setCycleDay").value=startDay();
     renderGoalSetting();
     renderCatBudgets(); renderStoreMaster(); renderCatMaster();
-    setSync(serverVersion>0?("✓ 同期済み（version "+serverVersion+"）"):"クラウド：データなし");
+    setSync(serverVersion>0?syncedLabel():"クラウド：データなし");
   }
   function renderCatBudgets(){
     var box=$("catBudgetList"); if(!box) return;
@@ -1884,10 +1900,12 @@
       return decryptVault(aesKey, remote).then(function(obj){
         DB=normalize(obj);
         serverVersion=(typeof remote.version==="number")?remote.version:0;
+        serverUpdatedAt=(typeof remote.updatedAt==="number")?remote.updatedAt:0;
         saltCache=b64ToBytes(remote.salt);   // 既存saltに鍵を合わせ直す必要はない（同PIN由来）
         selectedCat=DB.cats[0]?DB.cats[0].id:null;
         renderAll(); renderSettings();
-        setSync("✓ 読み直しました（version "+serverVersion+"）");
+        var rt=syncTimeStr(serverUpdatedAt);
+        setSync(rt?("✓ 読み直しました（最終更新 "+rt+"）"):"✓ 読み直しました");
         toast("クラウドから読み直しました ✓");
       }).catch(function(){ toast("復号できませんでした（PINが違う可能性）"); setSync("⚠️ 復号失敗"); });
     }).catch(function(e){ console.error(e); toast("読み込みに失敗"); setSync("⚠️ 読み込み失敗"); });
@@ -1944,7 +1962,8 @@
             "クラウドだけにあるデータは消えます。\n\n"+
             "（念のため、今のクラウドの内容をバックアップとして書き出しました）\n\n"+
             "本当に置き換えますか？";
-          setSync(serverVersion>0?("✓ 同期済み（version "+serverVersion+"）"):"クラウド：確認中");
+          if(typeof remote.updatedAt==="number") serverUpdatedAt=remote.updatedAt;
+          setSync(serverVersion>0?syncedLabel():"クラウド：確認中");
           if(confirm(msg)){ proceed(); }
           else{ toast("取り込みをやめました"); }
         }).catch(function(){
@@ -2463,6 +2482,7 @@
           aesKey=key; saltCache=salt;
           DB=normalize(obj);
           serverVersion=(typeof vaultRemote.version==="number")?vaultRemote.version:0;
+          serverUpdatedAt=(typeof vaultRemote.updatedAt==="number")?vaultRemote.updatedAt:0;
           finishUnlock(pin);
         });
       });
@@ -2493,7 +2513,7 @@
     viewAnchor=new Date();
     renderAll();
     gate(null);   // アプリ表示
-    setSync(serverVersion>0?("✓ 同期済み（version "+serverVersion+"）"):"✓ 同期開始");
+    setSync(serverVersion>0?syncedLabel():"✓ 同期開始");
   }
 
   // ============================================================
