@@ -104,10 +104,12 @@
   details{margin-top:6px;}
   summary{cursor:pointer;color:var(--teal);font-weight:600;font-size:14px;padding:6px 0;}
   .help{font-size:12px;color:var(--ink-sub);margin-top:4px;}
-  /* 明細入力（品名＋金額の動的行） */
-  .det-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
-  .det-row input.det-name{flex:1 1 auto;min-width:0;}
-  .det-row input.det-amt{flex:0 0 100px;width:100px;text-align:right;}
+  /* 明細入力（品名＝上段／金額・費目・✕＝下段。375pxで窮屈にしない2段レイアウト） */
+  .det-row{border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:10px;background:#fff;}
+  .det-row input.det-name{display:block;width:100%;min-width:0;margin-bottom:8px;}
+  .det-row .det-bot{display:flex;align-items:center;gap:8px;}
+  .det-row input.det-amt{flex:0 0 92px;width:92px;text-align:right;}
+  .det-row select.det-cat{flex:1 1 auto;min-width:0;padding:0 8px;height:48px;font-size:15px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);-webkit-appearance:none;appearance:none;}
   .det-row button.det-del{flex:0 0 auto;border:1.5px solid var(--line);background:#fff;color:var(--ink-sub);font-size:18px;font-weight:700;width:44px;height:48px;border-radius:12px;cursor:pointer;line-height:1;padding:0;}
   .det-row button.det-del:active{background:var(--line);}
   .det-add{display:block;width:100%;border:1.5px dashed var(--teal);background:#fff;color:var(--teal);font-size:15px;font-weight:700;padding:11px;border-radius:12px;cursor:pointer;margin-top:10px;}
@@ -909,13 +911,26 @@
     return catSpentFor(cycleOf(new Date()));
   }
   function cycleBudgetTotal(catBudgets){ var t=0; Object.keys(catBudgets).forEach(function(id){ t+=Number(catBudgets[id]||0); }); return t; }
-  // 指定した期の費目別支出合計（既存inCycleを流用・二重計算しない）
-  function catSpentFor(cycle){
+  // 支出リストの費目別合計。items[] がある支出は item ごとの catId で集計（混在レシート対応）、
+  // 無い支出は従来どおり expense.catId。費目別内訳(tally)・費目バーと同じ基準＝二重計上ゼロ。
+  function catSpentOf(list){
     var cs={};
-    DB.expenses.forEach(function(e){
-      if(inCycle(e.date||"",cycle)) cs[e.catId]=(cs[e.catId]||0)+Number(e.amount||0);
+    list.forEach(function(e){
+      var items=Array.isArray(e.items)?e.items:null;
+      if(items && items.length){
+        items.forEach(function(it){
+          var cid=it.catId||e.catId;
+          cs[cid]=(cs[cid]||0)+Number(it.amount||0);
+        });
+      }else{
+        cs[e.catId]=(cs[e.catId]||0)+Number(e.amount||0);
+      }
     });
     return cs;
+  }
+  // 指定した期の費目別支出合計（既存inCycleを流用・二重計算しない）
+  function catSpentFor(cycle){
+    return catSpentOf(DB.expenses.filter(function(e){ return inCycle(e.date||"",cycle); }));
   }
   // 指定した期の残額（予算設定済み費目の 予算−その期の支出）。
   function cycleRemainFor(cycle){
@@ -1134,7 +1149,7 @@
     $("homeMonth").textContent=cycleLabel(c)+(isCurrent?"":"（過去）");
     var catBudgets=DB.catBudgets||{};
     var list=DB.expenses.filter(function(e){ return inCycle(e.date||"",c); });
-    var catSpent={}; list.forEach(function(e){ catSpent[e.catId]=(catSpent[e.catId]||0)+Number(e.amount||0); });
+    var catSpent=catSpentOf(list); // items[] のある支出は item 費目で集計（費目バー/内訳と同一基準）
     var remain=cycleRemain(catBudgets,catSpent);
     var hasBudget=Object.keys(catBudgets).length>0;
     var daysLeft=daysLeftIn(c,new Date());
@@ -1299,19 +1314,29 @@
   }
   // ── 明細入力（品名＋金額の動的行）────────────────────────────
   // 1行追加（空）。最低0行可（全削除しても落ちない）。
-  function detAddRow(name, amt){
+  function detAddRow(name, amt, catId){
     var box=$("detRows");
     var row=document.createElement("div"); row.className="det-row";
     var nm=document.createElement("input");
     nm.type="text"; nm.className="det-name"; nm.placeholder="品名（例：大根）"; nm.value=name||"";
+    var bot=document.createElement("div"); bot.className="det-bot";
     var am=document.createElement("input");
     am.type="number"; am.className="det-amt"; am.inputMode="numeric"; am.min="0"; am.placeholder="金額"; am.value=(amt!=null?amt:"");
+    // 行の費目セレクタ＝6費目。初期値＝引数 catId、無ければ上のチップで選んだ費目（デフォルト継承）。
+    var cat=document.createElement("select"); cat.className="det-cat"; cat.setAttribute("aria-label","この品目の費目");
+    var initCat=catId||selectedCat||(DB.cats[0]&&DB.cats[0].id);
+    DB.cats.forEach(function(c){
+      var op=document.createElement("option"); op.value=c.id; op.textContent=c.icon+" "+c.name;
+      if(c.id===initCat) op.selected=true;
+      cat.appendChild(op);
+    });
     var del=document.createElement("button");
     del.type="button"; del.className="det-del"; del.textContent="✕"; del.setAttribute("aria-label","この品目を削除");
     nm.addEventListener("input", detSync);
     am.addEventListener("input", detSync);
     del.addEventListener("click", function(){ box.removeChild(row); detSync(); });
-    row.appendChild(nm); row.appendChild(am); row.appendChild(del);
+    bot.appendChild(am); bot.appendChild(cat); bot.appendChild(del);
+    row.appendChild(nm); row.appendChild(bot);
     box.appendChild(row);
   }
   // 明細行を読む（生の入力をそのまま返す。バリデーションは追加時）
@@ -1321,7 +1346,8 @@
     for(var i=0;i<rows.length;i++){
       var nm=rows[i].querySelector(".det-name").value.trim();
       var av=rows[i].querySelector(".det-amt").value.trim();
-      out.push({name:nm, amtRaw:av, amt:Number(av)});
+      var cs=rows[i].querySelector(".det-cat");
+      out.push({name:nm, amtRaw:av, amt:Number(av), cat:(cs?cs.value:"")});
     }
     return out;
   }
@@ -1448,20 +1474,27 @@
 
     if(inUse){
       // ── 明細モード：各行 品名＋金額の両方必須・金額>0 ──
-      var items=[]; var sum=0;
+      var items=[]; var sum=0; var byCatSum={};
       for(var i=0;i<rows.length;i++){
         var r=rows[i];
         if(r.name==="" && r.amtRaw==="") continue; // 完全な空行は無視（弾かない）
         if(r.name==="" || r.amtRaw===""){ toast("品名と金額を両方入れてください"); return; }
         if(!isFinite(r.amt) || r.amt<=0){ toast("金額は0より大きい数で入れてください"); return; }
         var av=Math.round(r.amt);
-        items.push({name:r.name, amount:av, catId:selectedCat, subId:""});
+        // 行の費目（無効/空なら上のチップ費目に寄せる＝壊さない）。subIdは空（Claudeが後で細分類）。
+        var rcat=(r.cat && catById(r.cat)) ? r.cat : selectedCat;
+        items.push({name:r.name, amount:av, catId:rcat, subId:""});
+        byCatSum[rcat]=(byCatSum[rcat]||0)+av;
         sum+=av;
       }
       if(!items.length){ toast("品目を入れてください"); return; }
       // 検算：items合計=exp.amount を常に保証
       if(sum!==items.reduce(function(a,it){return a+it.amount;},0)){ toast("合計の計算に失敗しました"); return; }
       exp.items=items; exp.amount=sum;
+      // 代表費目（後方互換）＝items中で合計金額が最大の費目。同額は最初に出た費目（安定）。
+      var repCat=selectedCat, repMax=-1;
+      items.forEach(function(it){ var s=byCatSum[it.catId]; if(s>repMax){ repMax=s; repCat=it.catId; } });
+      exp.catId=repCat;
     }else{
       // ── 明細なし：従来どおり金額手入力 ──
       var amount=Number($("inAmount").value);
@@ -1477,7 +1510,8 @@
     detReset();
     discReset();
     refreshStoreDatalists(); renderRecent();
-    toast(addedToast(selectedCat));
+    // トーストは代表費目(exp.catId)基準＝混在時も主費目の残額 or 今期あと（シンプル・マイナス中立）。
+    toast(addedToast(exp.catId));
   });
   // 追加後の即時フィードバック：打つと残額が動く（中立・評価語なし・既存の残額/期ロジック流用）。
   function addedToast(catId){
